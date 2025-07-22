@@ -4,8 +4,11 @@
  */
 #include "ILI9341.h"
 #include "main.h"
+#include "lvgl.h"
 
 extern SPI_HandleTypeDef ILI9341_SPI;
+
+static lv_display_t *dma_display = NULL;
 
 #define CS_LOW()  HAL_GPIO_WritePin(ILI9341_CS_PORT, ILI9341_CS_PIN, GPIO_PIN_RESET)
 #define CS_HIGH() HAL_GPIO_WritePin(ILI9341_CS_PORT, ILI9341_CS_PIN, GPIO_PIN_SET)
@@ -218,12 +221,24 @@ void ILI9341_DrawBitmap(uint16_t w, uint16_t h, uint8_t *s)
 }
 
 /** Write a bitmap using DMA */
-void ILI9341_DrawBitmapDMA(uint16_t w, uint16_t h, uint8_t *s)
+void ILI9341_DrawBitmapDMA(uint16_t w, uint16_t h, uint8_t *s, lv_display_t *disp)
 {
     ILI9341_WriteCommand(0x2C); // Memory write
     DC_HIGH();
     CS_LOW();
+    dma_display = disp;
     HAL_SPI_Transmit_DMA(&ILI9341_SPI, s, w * h * 2);
+}
+
+void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
+{
+    if(hspi == &ILI9341_SPI) {
+        CS_HIGH();
+        if(dma_display) {
+            lv_display_flush_ready(dma_display);
+            dma_display = NULL;
+        }
+    }
 }
 
 
