@@ -136,8 +136,5 @@ static void disp_flush(lv_display_t * disp_drv, const lv_area_t * area, uint8_t 
     lv_color_t *color_p = (lv_color_t *) px_map;
 
 //    ILI9341_DrawBitmap(width, height, (uint8_t *) color_p);
-    ILI9341_DrawBitmapDMA(width, height, (uint8_t *) color_p);
-    /*IMPORTANT!!!
-     *Inform the graphics library that you are ready with the flushing*/
-    lv_display_flush_ready(disp_drv);
+    ILI9341_DrawBitmapDMA(width, height, (uint8_t *) color_p, disp_drv);
 }

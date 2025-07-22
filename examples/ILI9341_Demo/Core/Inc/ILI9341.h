@@ -2,6 +2,7 @@
 #define ILI9341_H
 
 #include "stm32f4xx_hal.h"
+#include "lvgl.h"
 
 #define ILI9341_SPI       hspi1
 
@@ -30,6 +31,6 @@ void ILI9341_SetRotation(uint8_t m);
 //LVGL
 void ILI9341_SetWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1);
 void ILI9341_DrawBitmap(uint16_t w, uint16_t h, uint8_t *s);
-void ILI9341_DrawBitmapDMA(uint16_t w, uint16_t h, uint8_t *s);
+void ILI9341_DrawBitmapDMA(uint16_t w, uint16_t h, uint8_t *s, lv_display_t *disp);
 
 #endif
