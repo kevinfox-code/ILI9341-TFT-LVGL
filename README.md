@@ -3,6 +3,12 @@
 
 This project provides lightweight display and touch drivers for the 2.8" ILI9341 SPI display with XPT2046 touchscreen, including LVGL integration.
 
+## Requirements
+
+- Built using LVGL v9.2.2
+- STM32 HAL library
+- SquareLine Studio is recommended for GUI design (limits to LVGL v9.2)
+
 ## Features
 
 - ILI9341 SPI Display (STM32 HAL)
