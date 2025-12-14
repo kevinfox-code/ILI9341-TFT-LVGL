@@ -19,11 +19,11 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include <src/tick/lv_tick.h>
 #include "stm32f4xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 /* USER CODE END Includes */
+#include "lvgl.h"
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN TD */

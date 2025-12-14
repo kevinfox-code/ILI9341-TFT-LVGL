@@ -127,28 +127,35 @@ void ILI9341_Init(void) {
 }
 
 void ILI9341_FillScreen(uint16_t color) {
+    // Set window to full screen (landscape mode after rotation 3)
+    ILI9341_WriteCommand(0x2A); // Column address
+    ILI9341_WriteData(0x00);
+    ILI9341_WriteData(0x00);
+    ILI9341_WriteData((320 - 1) >> 8);
+    ILI9341_WriteData((320 - 1) & 0xFF);
+
+    ILI9341_WriteCommand(0x2B); // Row address
+    ILI9341_WriteData(0x00);
+    ILI9341_WriteData(0x00);
+    ILI9341_WriteData((240 - 1) >> 8);
+    ILI9341_WriteData((240 - 1) & 0xFF);
+
+    ILI9341_WriteCommand(0x2C); // Memory write
+    
     uint8_t hi = color >> 8;
     uint8_t lo = color & 0xFF;
-    uint8_t buf[ILI9341_WIDTH * 2];
-
-    for (int i = 0; i < ILI9341_WIDTH; ++i) {
-        buf[2 * i] = hi;
-        buf[2 * i + 1] = lo;
+    
+    // Use a buffer for faster transmission
+    uint8_t line_buf[320 * 2];
+    for (int i = 0; i < 320; i++) {
+        line_buf[i * 2] = hi;
+        line_buf[i * 2 + 1] = lo;
     }
-
-    ILI9341_WriteCommand(0x2A);
-    ILI9341_WriteData(0x00); ILI9341_WriteData(0);
-    ILI9341_WriteData(0x00); ILI9341_WriteData(ILI9341_WIDTH - 1);
-
-    ILI9341_WriteCommand(0x2B);
-    ILI9341_WriteData(0x00); ILI9341_WriteData(0);
-    ILI9341_WriteData(0x01); ILI9341_WriteData(ILI9341_HEIGHT - 1);
-
-    ILI9341_WriteCommand(0x2C);
+    
     DC_HIGH();
     CS_LOW();
-    for (int y = 0; y < ILI9341_HEIGHT; y++) {
-        HAL_SPI_Transmit(&ILI9341_SPI, buf, ILI9341_WIDTH * 2, HAL_MAX_DELAY);
+    for (int y = 0; y < 240; y++) {
+        HAL_SPI_Transmit(&ILI9341_SPI, line_buf, 320 * 2, HAL_MAX_DELAY);
     }
     CS_HIGH();
 }
@@ -202,7 +209,7 @@ void ILI9341_DrawBitmap(uint16_t w, uint16_t h, uint8_t *s)
 
 void ILI9341_DrawBitmapDMA(uint16_t w, uint16_t h, uint8_t *s, lv_display_t *disp)
 {
-    ILI9341_WriteCommand(0x2C); // Memory write
+    // Memory write command (0x2C) is already sent by ILI9341_SetWindow
     DC_HIGH();
     CS_LOW();
     dma_display = disp;

@@ -97,7 +97,7 @@ void lv_port_disp_init(void)
 /*Initialize your display and the required peripherals.*/
 static void disp_init(void)
 {
-	ILI9341_Init();
+	// Already initialized in main
 }
 
 volatile bool disp_flush_enabled = true;

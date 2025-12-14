@@ -96,17 +96,30 @@ int main(void)
   MX_DMA_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
+  
+  // Initialize display
+  ILI9341_Init();
+  
+  // Quick hardware test
+  ILI9341_FillScreen(0xF800);  // Red
+  HAL_Delay(500);
+  ILI9341_FillScreen(0x07E0);  // Green
+  HAL_Delay(500);
+  ILI9341_FillScreen(0x001F);  // Blue
+  HAL_Delay(500);
+  
+  // Initialize LVGL
   lv_init();
   lv_port_disp_init();
 
   /* Change Active Screen's background color */
-lv_obj_set_style_bg_color(lv_screen_active(), lv_color_hex(0x003a57), LV_PART_MAIN);
-lv_obj_set_style_text_color(lv_screen_active(), lv_color_hex(0xffffff), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(lv_screen_active(), lv_color_hex(0x003a57), LV_PART_MAIN);
+  lv_obj_set_style_text_color(lv_screen_active(), lv_color_hex(0xffffff), LV_PART_MAIN);
 
-/* Create a spinner */
-lv_obj_t * spinner = lv_spinner_create(lv_screen_active());
-lv_obj_set_size(spinner, 64, 64);
-lv_obj_align(spinner, LV_ALIGN_BOTTOM_MID, 0, 0);
+  /* Create a spinner */
+  lv_obj_t * spinner = lv_spinner_create(lv_screen_active());
+  lv_obj_set_size(spinner, 64, 64);
+  lv_obj_align(spinner, LV_ALIGN_BOTTOM_MID, 0, 0);
 
   /* USER CODE END 2 */
 
@@ -303,8 +316,7 @@ void Error_Handler(void)
   }
   /* USER CODE END Error_Handler_Debug */
 }
-
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
   *         where the assert_param error has occurred.
