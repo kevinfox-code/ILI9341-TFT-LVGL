@@ -65,6 +65,13 @@ const osThreadAttr_t defaultTask_attributes = {
   .stack_size = 128 * 8,
   .priority = (osPriority_t) osPriorityNormal,
 };
+/* Definitions for uartTask */
+osThreadId_t uartTaskHandle;
+const osThreadAttr_t uartTask_attributes = {
+  .name = "uartTask",
+  .stack_size = 128 * 8,
+  .priority = (osPriority_t) osPriorityLow,
+};
 /* USER CODE BEGIN PV */
 lv_obj_t *time_label = NULL;
 lv_obj_t *date_label = NULL;
@@ -79,6 +86,7 @@ static void MX_RTC_Init(void);
 static void MX_SPI2_Init(void);
 static void MX_USART2_UART_Init(void);
 void StartDefaultTask(void *argument);
+void StartUartTask(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -86,6 +94,14 @@ void StartDefaultTask(void *argument);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+static void uart2_print(const char *s)
+{
+  if (s == NULL) {
+    return;
+  }
+  (void)HAL_UART_Transmit(&huart2, (uint8_t*)s, (uint16_t)strlen(s), 200);
+}
 
 /* USER CODE END 0 */
 
@@ -124,6 +140,13 @@ int main(void)
   MX_SPI2_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
+
+  /* UART sanity output BEFORE FreeRTOS starts. If you don't see this,
+   * it's wiring/port selection/baud (not RTOS/task scheduling).
+   */
+  uart2_print("BOOT\r\n");
+  HAL_Delay(50);
+  uart2_print("BOOT2\r\n");
   
   // Configure ILI9341 Display
   ILI9341_Config_t ili_config = {
@@ -202,11 +225,11 @@ int main(void)
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
-  /* creation of uartTask - TEMPORARILY DISABLED FOR DEBUGGING */
-  // uartTaskHandle = osThreadNew(StartUartTask, NULL, &uartTask_attributes);
-  // if (uartTaskHandle == NULL) {
-  //   Error_Handler();
-  // }
+  /* creation of uartTask */
+  uartTaskHandle = osThreadNew(StartUartTask, NULL, &uartTask_attributes);
+  if (uartTaskHandle == NULL) {
+    Error_Handler();
+  }
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
@@ -320,29 +343,48 @@ static void MX_RTC_Init(void)
     Error_Handler();
   }
 
-  /* USER CODE BEGIN Check_RTC_BKUP */
+  /* Sync shadow registers (recommended when using LSE) */
+  if (HAL_RTC_WaitForSynchro(&hrtc) != HAL_OK)
+  {
+    Error_Handler();
+  }
 
+  /* USER CODE BEGIN Check_RTC_BKUP */
+  /* If the backup domain is preserved and a marker is present,
+   * don't overwrite the current time/date on every reset.
+   */
+  HAL_PWR_EnableBkUpAccess();
+  const uint32_t rtc_magic = 0x32F2U;
+  const uint32_t rtc_magic_reg = RTC_BKP_DR0;
+  uint32_t rtc_already_set = (HAL_RTCEx_BKUPRead(&hrtc, rtc_magic_reg) == rtc_magic) ? 1U : 0U;
   /* USER CODE END Check_RTC_BKUP */
 
   /** Initialize RTC and set the Time and Date
   */
-  sTime.Hours = 0x9;
-  sTime.Minutes = 0x11;
-  sTime.Seconds = 0x0;
-  sTime.DayLightSaving = RTC_DAYLIGHTSAVING_NONE;
-  sTime.StoreOperation = RTC_STOREOPERATION_RESET;
-  if (HAL_RTC_SetTime(&hrtc, &sTime, RTC_FORMAT_BCD) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sDate.WeekDay = RTC_WEEKDAY_MONDAY;
-  sDate.Month = RTC_MONTH_AUGUST;
-  sDate.Date = 0x12;
-  sDate.Year = 0x25;
+  if (!rtc_already_set) {
+    /* Fallback compile-time default; adjust once over UART/UI if desired.
+     * Use BIN format consistently.
+     */
+    sTime.Hours = 12;
+    sTime.Minutes = 0;
+    sTime.Seconds = 0;
+    sTime.DayLightSaving = RTC_DAYLIGHTSAVING_NONE;
+    sTime.StoreOperation = RTC_STOREOPERATION_RESET;
+    if (HAL_RTC_SetTime(&hrtc, &sTime, RTC_FORMAT_BIN) != HAL_OK)
+    {
+      Error_Handler();
+    }
+    sDate.WeekDay = RTC_WEEKDAY_SUNDAY;
+    sDate.Month = RTC_MONTH_DECEMBER;
+    sDate.Date = 14;
+    sDate.Year = 25;
 
-  if (HAL_RTC_SetDate(&hrtc, &sDate, RTC_FORMAT_BCD) != HAL_OK)
-  {
-    Error_Handler();
+    if (HAL_RTC_SetDate(&hrtc, &sDate, RTC_FORMAT_BIN) != HAL_OK)
+    {
+      Error_Handler();
+    }
+
+    HAL_RTCEx_BKUPWrite(&hrtc, rtc_magic_reg, rtc_magic);
   }
   /* USER CODE BEGIN RTC_Init 2 */
 
@@ -562,38 +604,89 @@ void StartDefaultTask(void *argument)
   (void)argument;  /* Unused parameter */
   char time_str[32];
   char date_str[64];
-  uint32_t last_ui_update_ms = HAL_GetTick();
-  uint32_t start_tick = HAL_GetTick();
+  RTC_TimeTypeDef sTime;
+  RTC_DateTypeDef sDate;
+  static const char *days[] = {"?","Mon","Tue","Wed","Thu","Fri","Sat","Sun"};
+  static const char *months[] = {"?","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
+  uint8_t last_seconds = 0xFF;
   
   /* Infinite loop */
   for(;;)
   {
-    /* LVGL handler should run frequently */
+    /* LVGL tick + handler: keep it self-contained in this task.
+     * This avoids relying on SysTick/TIM6 wiring when using FreeRTOS.
+     */
+    lv_tick_inc(5);
     lv_timer_handler();
 
-    /* Update UI at 1 Hz using HAL tick */
+    /* Update UI when RTC seconds change (avoids reliance on HAL_GetTick) */
     if (time_label != NULL && date_label != NULL) {
-      uint32_t now_ms = HAL_GetTick();
-      if ((now_ms - last_ui_update_ms) >= 1000U) {
-        last_ui_update_ms = now_ms;
+      if (HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BIN) == HAL_OK) {
+        (void)HAL_RTC_GetDate(&hrtc, &sDate, RTC_FORMAT_BIN);
 
-        uint32_t elapsed_seconds = (now_ms - start_tick) / 1000U;
-        uint32_t hours = (elapsed_seconds / 3600U) % 24U;
-        uint32_t minutes = (elapsed_seconds / 60U) % 60U;
-        uint32_t seconds = elapsed_seconds % 60U;
+        if (sTime.Seconds != last_seconds) {
+          last_seconds = sTime.Seconds;
 
-        snprintf(time_str, sizeof(time_str), "%02lu:%02lu:%02lu",
-                 hours, minutes, seconds);
-        lv_label_set_text(time_label, time_str);
+          snprintf(time_str, sizeof(time_str), "%02u:%02u:%02u",
+                   (unsigned)sTime.Hours, (unsigned)sTime.Minutes, (unsigned)sTime.Seconds);
+          lv_label_set_text(time_label, time_str);
 
-        snprintf(date_str, sizeof(date_str), "Uptime: %lus", (unsigned long)elapsed_seconds);
-        lv_label_set_text(date_label, date_str);
+          const char *wd = (sDate.WeekDay <= 7) ? days[sDate.WeekDay] : "?";
+          const char *mo = (sDate.Month <= 12) ? months[sDate.Month] : "?";
+          snprintf(date_str, sizeof(date_str), "%s, %s %u, 20%02u",
+                   wd, mo, (unsigned)sDate.Date, (unsigned)sDate.Year);
+          lv_label_set_text(date_label, date_str);
+        }
+      } else {
+        lv_label_set_text(time_label, "RTC ERR");
       }
     }
 
     osDelay(5);
   }
   /* USER CODE END 5 */
+}
+
+/* USER CODE BEGIN Header_StartUartTask */
+/**
+  * @brief  Function implementing the uartTask thread.
+  * @param  argument: Not used
+  * @retval None
+  */
+/* USER CODE END Header_StartUartTask */
+void StartUartTask(void *argument)
+{
+  /* USER CODE BEGIN StartUartTask */
+  (void)argument;
+  RTC_TimeTypeDef sTime;
+  RTC_DateTypeDef sDate;
+  char line[96];
+
+  /* Give the host a moment to attach after reset */
+  osDelay(250);
+
+  uart2_print("UART TASK START\r\n");
+
+  for(;;)
+  {
+    /* Read time then date (required sequence for STM32 RTC shadow registers) */
+    if (HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BIN) == HAL_OK) {
+      (void)HAL_RTC_GetDate(&hrtc, &sDate, RTC_FORMAT_BIN);
+
+      (void)snprintf(line, sizeof(line),
+                     "RTC %02u:%02u:%02u %02u/%02u/20%02u\r\n",
+                     (unsigned)sTime.Hours,
+                     (unsigned)sTime.Minutes,
+                     (unsigned)sTime.Seconds,
+                     (unsigned)sDate.Month,
+                     (unsigned)sDate.Date,
+                     (unsigned)sDate.Year);
+      uart2_print(line);
+    }
+
+    osDelay(1000);
+  }
+  /* USER CODE END StartUartTask */
 }
 
 /**
@@ -612,7 +705,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   if (htim->Instance == TIM6)
   {
     HAL_IncTick();
-    lv_tick_inc(1);
   }
   /* USER CODE BEGIN Callback 1 */
 
