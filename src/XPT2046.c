@@ -4,27 +4,31 @@
 #define CMD_X   0xD0
 #define CMD_Y   0x90
 
-/* Helpers */
-#define CS_LOW()   HAL_GPIO_WritePin(XPT2046_CS_PORT, XPT2046_CS_PIN, GPIO_PIN_RESET)
-#define CS_HIGH()  HAL_GPIO_WritePin(XPT2046_CS_PORT, XPT2046_CS_PIN, GPIO_PIN_SET)
+static const XPT2046_Config_t *xpt_config = NULL;
 
-static SPI_HandleTypeDef *xpt_spi = NULL;
+/* Helpers */
+#define CS_LOW()   HAL_GPIO_WritePin(xpt_config->cs_port, xpt_config->cs_pin, GPIO_PIN_RESET)
+#define CS_HIGH()  HAL_GPIO_WritePin(xpt_config->cs_port, xpt_config->cs_pin, GPIO_PIN_SET)
 
 /* Reads one 12-bit value (throws away bottom 4 bits) */
 static uint16_t spi_xfer(uint8_t cmd) {
     uint8_t tx[3] = { cmd, 0, 0 }, rx[3];
-    HAL_SPI_TransmitReceive(xpt_spi, tx, rx, 3, HAL_MAX_DELAY);
+    HAL_SPI_TransmitReceive(xpt_config->hspi, tx, rx, 3, HAL_MAX_DELAY);
     return (((uint16_t)rx[1] << 8) | rx[2]) >> 4;
 }
 
-void XPT2046_Init(SPI_HandleTypeDef *hspi) {
-    xpt_spi = hspi;
+void XPT2046_Init(const XPT2046_Config_t *config) {
+    xpt_config = config;
     CS_HIGH();
 }
 
 bool XPT2046_TouchDetected(void) {
+    /* If IRQ port is not configured, return false (polling mode not supported without IRQ) */
+    if (xpt_config->irq_port == NULL) {
+        return false;
+    }
     /* PENIRQ is wired: only true when you actually touch */
-    return HAL_GPIO_ReadPin(XPT2046_IRQ_PORT, XPT2046_IRQ_PIN)
+    return HAL_GPIO_ReadPin(xpt_config->irq_port, xpt_config->irq_pin)
            == GPIO_PIN_RESET;
 }
 

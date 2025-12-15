@@ -7,18 +7,19 @@
 
 #include "stm32f4xx_hal.h"
 #include <stdbool.h>
-#include "main.h"
 
-/* ---------- user‑configurable pins ----------------------------------- */
-#define XPT2046_CS_PORT     GPIOA
-#define XPT2046_CS_PIN      GPIO_PIN_8
+/**
+ * @brief XPT2046 Touch Controller Configuration Structure
+ */
+typedef struct {
+    SPI_HandleTypeDef *hspi;        /* SPI peripheral handle */
+    GPIO_TypeDef *cs_port;          /* Chip Select GPIO port */
+    uint16_t cs_pin;                /* Chip Select GPIO pin */
+    GPIO_TypeDef *irq_port;         /* IRQ (PENIRQ) GPIO port (optional, can be NULL) */
+    uint16_t irq_pin;               /* IRQ (PENIRQ) GPIO pin */
+} XPT2046_Config_t;
 
-/*  Uncomment if the PENIRQ line is wired (low while pressed)            */
-#define XPT2046_IRQ_PORT    T_IRQ_GPIO_Port
-#define XPT2046_IRQ_PIN     T_IRQ_Pin
-/* --------------------------------------------------------------------- */
-
-void XPT2046_Init(SPI_HandleTypeDef *spi);
+void XPT2046_Init(const XPT2046_Config_t *config);
 bool XPT2046_TouchDetected(void);
 bool XPT2046_GetTouch(uint16_t *x, uint16_t *y);
 

@@ -4,18 +4,14 @@
  */
 #include "TouchController.h"
 #include "XPT2046.h"
-#include "main.h"          /* for hspi2, huart2 */
+#include "main.h"
 #include "lvgl.h"
 #include <stdio.h>
 #include <inttypes.h>      /* PRIu16 */
 
-extern SPI_HandleTypeDef hspi2;
-extern UART_HandleTypeDef huart2;
-
-/* Retarget printf() over UART */
+/* Retarget printf() - stubbed out (no UART configured) */
 int __io_putchar(int ch) {
-    uint8_t c = ch;
-    HAL_UART_Transmit(&huart2, &c, 1, HAL_MAX_DELAY);
+    (void)ch;  /* Unused parameter */
     return ch;
 }
 
@@ -50,7 +46,7 @@ static lv_coord_t map_y(uint16_t raw) {
 /* Draw a little green + at exactly (x,y) on the given screen */
 static void draw_cross(lv_obj_t *scr, lv_coord_t x, lv_coord_t y) {
     /* horizontal */
-    static const lv_point_t ph[] = {{-10,0},{10,0}};
+    static const lv_point_precise_t ph[] = {{-10,0},{10,0}};
     lv_obj_t *h = lv_line_create(scr);
     lv_line_set_points(h, ph, 2);
     lv_obj_set_style_line_color(h, lv_color_hex(0x00FF00), LV_PART_MAIN|LV_STATE_DEFAULT);
@@ -58,7 +54,7 @@ static void draw_cross(lv_obj_t *scr, lv_coord_t x, lv_coord_t y) {
     lv_obj_set_pos(h, x, y);
 
     /* vertical */
-    static const lv_point_t pv[] = {{0,-10},{0,10}};
+    static const lv_point_precise_t pv[] = {{0,-10},{0,10}};
     lv_obj_t *v = lv_line_create(scr);
     lv_line_set_points(v, pv, 2);
     lv_obj_set_style_line_color(v, lv_color_hex(0x00FF00), LV_PART_MAIN|LV_STATE_DEFAULT);
@@ -90,6 +86,8 @@ void touch_calibrate(void) {
 
     uint16_t raw_x[4], raw_y[4];
     for(int i = 0; i < 4; i++) {
+        printf("Starting calibration point %d\r\n", i);
+        
         lv_obj_clean(cal);
         draw_cross(cal, corners[i].x, corners[i].y);
 
@@ -97,11 +95,16 @@ void touch_calibrate(void) {
         lv_label_set_text(lbl, "Touch the green +");
         lv_obj_align(lbl, LV_ALIGN_CENTER, 0, 40);
 
+        /* Force screen update before waiting (scheduler not yet started) */
+        lv_timer_handler();
+        lv_refr_now(NULL);
+        HAL_Delay(100);  /* Small delay to ensure display update completes */
+
         /* wait for press */
         uint16_t rx, ry;
+        printf("Waiting for press...\r\n");
         do {
-            lv_timer_handler();
-            HAL_Delay(5);
+            HAL_Delay(10);
         } while(!XPT2046_GetTouch(&rx, &ry));
 
         raw_x[i] = rx;
@@ -109,11 +112,25 @@ void touch_calibrate(void) {
         printf("Cal %d: raw=(%u,%u)\r\n", i, rx, ry);
 
         /* wait for release */
+        printf("Waiting for release...\r\n");
         do {
-            lv_timer_handler();
-            HAL_Delay(5);
+            HAL_Delay(10);
         } while(XPT2046_GetTouch(&rx, &ry));
+        
+        printf("Point %d complete\r\n", i);
+        HAL_Delay(100);  /* Small delay between points */
     }
+
+    printf("Calibration complete!\r\n");
+
+    /* Create and load a new blank screen for the main app */
+    lv_obj_t *main_screen = lv_obj_create(NULL);
+    lv_disp_load_scr(main_screen);
+    
+    /* Clean up calibration screen */
+    lv_obj_del(cal);
+    lv_timer_handler();  /* Process deletion before scheduler starts */
+    lv_refr_now(NULL);   /* Force screen refresh */
 
     /* now raw_x/raw_y arrays hold your 4 corner measurements.
        Use them to recompute RAW_*_MIN/MAX above and rebuild. */
@@ -137,8 +154,8 @@ static void touchpad_read(lv_indev_t *indev, lv_indev_data_t *data) {
 }
 
 /* ———— initialization ———— */
-void TouchController_Init(void) {
-    XPT2046_Init(&hspi2);
+void TouchController_Init(const XPT2046_Config_t *config) {
+    XPT2046_Init(config);
     lv_indev_t *ind = lv_indev_create();
     lv_indev_set_type(ind, LV_INDEV_TYPE_POINTER);
     lv_indev_set_read_cb(ind, touchpad_read);

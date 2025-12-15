@@ -6,6 +6,7 @@
 #define TOUCH_CONTROLLER_H_
 
 #include "lvgl.h"
+#include "XPT2046.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -15,7 +16,7 @@ extern "C" {
  * Initialize the XPT2046 driver and register it as an LVGL pointer device.
  * Call this once, before you call touch_calibrate() or start your main loop.
  */
-void TouchController_Init(void);
+void TouchController_Init(const XPT2046_Config_t *config);
 
 /**
  * Run a 4-point on-screen calibration.

@@ -1,35 +1,23 @@
-/**
- * @file ILI9341.c
- * @brief Simple SPI driver for the ILI9341 TFT controller.
- */
 #include "ILI9341.h"
 #include "main.h"
 #include "lvgl.h"
 
-extern SPI_HandleTypeDef ILI9341_SPI;
-
+static const ILI9341_Config_t *ili_config = NULL;
 static lv_display_t *dma_display = NULL;
 
-#define CS_LOW()  HAL_GPIO_WritePin(ILI9341_CS_PORT, ILI9341_CS_PIN, GPIO_PIN_RESET)
-#define CS_HIGH() HAL_GPIO_WritePin(ILI9341_CS_PORT, ILI9341_CS_PIN, GPIO_PIN_SET)
+#define CS_LOW()  HAL_GPIO_WritePin(ili_config->cs_port, ili_config->cs_pin, GPIO_PIN_RESET)
+#define CS_HIGH() HAL_GPIO_WritePin(ili_config->cs_port, ili_config->cs_pin, GPIO_PIN_SET)
 
-#define DC_LOW()  HAL_GPIO_WritePin(ILI9341_DC_PORT, ILI9341_DC_PIN, GPIO_PIN_RESET)
-#define DC_HIGH() HAL_GPIO_WritePin(ILI9341_DC_PORT, ILI9341_DC_PIN, GPIO_PIN_SET)
+#define DC_LOW()  HAL_GPIO_WritePin(ili_config->dc_port, ili_config->dc_pin, GPIO_PIN_RESET)
+#define DC_HIGH() HAL_GPIO_WritePin(ili_config->dc_port, ili_config->dc_pin, GPIO_PIN_SET)
 
-#define RESET_LOW()  HAL_GPIO_WritePin(ILI9341_RESET_PORT, ILI9341_RESET_PIN, GPIO_PIN_RESET)
-#define RESET_HIGH() HAL_GPIO_WritePin(ILI9341_RESET_PORT, ILI9341_RESET_PIN, GPIO_PIN_SET)
+#define RESET_LOW()  HAL_GPIO_WritePin(ili_config->reset_port, ili_config->reset_pin, GPIO_PIN_RESET)
+#define RESET_HIGH() HAL_GPIO_WritePin(ili_config->reset_port, ili_config->reset_pin, GPIO_PIN_SET)
 
-/**
- * @brief Transmit a raw byte sequence over SPI.
- *
- * @param data Pointer to the data to send
- * @param size Number of bytes to transmit
- */
 static void ILI9341_Write(uint8_t *data, uint16_t size) {
-    HAL_SPI_Transmit(&ILI9341_SPI, data, size, HAL_MAX_DELAY);
+    HAL_SPI_Transmit(ili_config->hspi, data, size, HAL_MAX_DELAY);
 }
 
-/** Send a command byte to the controller */
 void ILI9341_WriteCommand(uint8_t cmd) {
     DC_LOW();
     CS_LOW();
@@ -37,7 +25,6 @@ void ILI9341_WriteCommand(uint8_t cmd) {
     CS_HIGH();
 }
 
-/** Send a single data byte */
 void ILI9341_WriteData(uint8_t data) {
     DC_HIGH();
     CS_LOW();
@@ -45,7 +32,6 @@ void ILI9341_WriteData(uint8_t data) {
     CS_HIGH();
 }
 
-/** Send two bytes of data */
 void ILI9341_WriteData16(uint16_t data) {
     uint8_t buf[2] = {data >> 8, data & 0xFF};
     DC_HIGH();
@@ -54,7 +40,6 @@ void ILI9341_WriteData16(uint16_t data) {
     CS_HIGH();
 }
 
-/** Toggle the reset line */
 void ILI9341_Reset(void) {
     RESET_LOW();
     HAL_Delay(20);
@@ -62,8 +47,8 @@ void ILI9341_Reset(void) {
     HAL_Delay(150);
 }
 
-/** Initialize the controller with the recommended sequence */
-void ILI9341_Init(void) {
+void ILI9341_Init(const ILI9341_Config_t *config) {
+    ili_config = config;
     ILI9341_Reset();
 
     ILI9341_WriteCommand(0x01);
@@ -141,35 +126,40 @@ void ILI9341_Init(void) {
     ILI9341_SetRotation(3);
 }
 
-/** Fill the entire display with a color */
 void ILI9341_FillScreen(uint16_t color) {
+    // Set window to full screen (landscape mode after rotation 3)
+    ILI9341_WriteCommand(0x2A); // Column address
+    ILI9341_WriteData(0x00);
+    ILI9341_WriteData(0x00);
+    ILI9341_WriteData((320 - 1) >> 8);
+    ILI9341_WriteData((320 - 1) & 0xFF);
+
+    ILI9341_WriteCommand(0x2B); // Row address
+    ILI9341_WriteData(0x00);
+    ILI9341_WriteData(0x00);
+    ILI9341_WriteData((240 - 1) >> 8);
+    ILI9341_WriteData((240 - 1) & 0xFF);
+
+    ILI9341_WriteCommand(0x2C); // Memory write
+    
     uint8_t hi = color >> 8;
     uint8_t lo = color & 0xFF;
-    uint8_t buf[ILI9341_WIDTH * 2];
-
-    for (int i = 0; i < ILI9341_WIDTH; ++i) {
-        buf[2 * i] = hi;
-        buf[2 * i + 1] = lo;
+    
+    // Use a buffer for faster transmission
+    uint8_t line_buf[320 * 2];
+    for (int i = 0; i < 320; i++) {
+        line_buf[i * 2] = hi;
+        line_buf[i * 2 + 1] = lo;
     }
-
-    ILI9341_WriteCommand(0x2A);
-    ILI9341_WriteData(0x00); ILI9341_WriteData(0);
-    ILI9341_WriteData(0x00); ILI9341_WriteData(ILI9341_WIDTH - 1);
-
-    ILI9341_WriteCommand(0x2B);
-    ILI9341_WriteData(0x00); ILI9341_WriteData(0);
-    ILI9341_WriteData(0x01); ILI9341_WriteData(ILI9341_HEIGHT - 1);
-
-    ILI9341_WriteCommand(0x2C);
+    
     DC_HIGH();
     CS_LOW();
-    for (int y = 0; y < ILI9341_HEIGHT; y++) {
-        HAL_SPI_Transmit(&ILI9341_SPI, buf, ILI9341_WIDTH * 2, HAL_MAX_DELAY);
+    for (int y = 0; y < 240; y++) {
+        HAL_SPI_Transmit(ili_config->hspi, line_buf, 320 * 2, HAL_MAX_DELAY);
     }
     CS_HIGH();
 }
 
-/** Configure display orientation */
 void ILI9341_SetRotation(uint8_t m)
 {
     ILI9341_WriteCommand(0x36);
@@ -190,9 +180,7 @@ void ILI9341_SetRotation(uint8_t m)
 }
 
 
-// LVGL helpers
-
-/** Set drawing area in GRAM */
+// LVGL
 void ILI9341_SetWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
 {
     ILI9341_WriteCommand(0x2A);
@@ -210,29 +198,27 @@ void ILI9341_SetWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
     ILI9341_WriteCommand(0x2C);
 }
 
-/** Write a bitmap to the display */
 void ILI9341_DrawBitmap(uint16_t w, uint16_t h, uint8_t *s)
 {
     ILI9341_WriteCommand(0x2C); // Memory write
     DC_HIGH();
     CS_LOW();
-    HAL_SPI_Transmit(&ILI9341_SPI, s, w * h * 2, HAL_MAX_DELAY);
+    HAL_SPI_Transmit(ili_config->hspi, s, w * h * 2, HAL_MAX_DELAY);
     CS_HIGH();
 }
 
-/** Write a bitmap using DMA */
 void ILI9341_DrawBitmapDMA(uint16_t w, uint16_t h, uint8_t *s, lv_display_t *disp)
 {
-    ILI9341_WriteCommand(0x2C); // Memory write
+    // Memory write command (0x2C) is already sent by ILI9341_SetWindow
     DC_HIGH();
     CS_LOW();
     dma_display = disp;
-    HAL_SPI_Transmit_DMA(&ILI9341_SPI, s, w * h * 2);
+    HAL_SPI_Transmit_DMA(ili_config->hspi, s, w * h * 2);
 }
 
 void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
 {
-    if(hspi == &ILI9341_SPI) {
+    if(hspi == ili_config->hspi) {
         CS_HIGH();
         if(dma_display) {
             lv_display_flush_ready(dma_display);
@@ -240,5 +226,4 @@ void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
         }
     }
 }
-
 
