@@ -57,6 +57,9 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/syscalls.c
     Core/Src/ILI9341.c
     Core/Src/LCDController.c 
+    Core/Src/TouchController.c
+    Core/Src/XPT2046.c
+
 
 )
 

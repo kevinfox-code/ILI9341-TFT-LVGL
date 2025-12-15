@@ -2,21 +2,20 @@
 #include "main.h"
 #include "lvgl.h"
 
-extern SPI_HandleTypeDef ILI9341_SPI;
-
+static const ILI9341_Config_t *ili_config = NULL;
 static lv_display_t *dma_display = NULL;
 
-#define CS_LOW()  HAL_GPIO_WritePin(ILI9341_CS_PORT, ILI9341_CS_PIN, GPIO_PIN_RESET)
-#define CS_HIGH() HAL_GPIO_WritePin(ILI9341_CS_PORT, ILI9341_CS_PIN, GPIO_PIN_SET)
+#define CS_LOW()  HAL_GPIO_WritePin(ili_config->cs_port, ili_config->cs_pin, GPIO_PIN_RESET)
+#define CS_HIGH() HAL_GPIO_WritePin(ili_config->cs_port, ili_config->cs_pin, GPIO_PIN_SET)
 
-#define DC_LOW()  HAL_GPIO_WritePin(ILI9341_DC_PORT, ILI9341_DC_PIN, GPIO_PIN_RESET)
-#define DC_HIGH() HAL_GPIO_WritePin(ILI9341_DC_PORT, ILI9341_DC_PIN, GPIO_PIN_SET)
+#define DC_LOW()  HAL_GPIO_WritePin(ili_config->dc_port, ili_config->dc_pin, GPIO_PIN_RESET)
+#define DC_HIGH() HAL_GPIO_WritePin(ili_config->dc_port, ili_config->dc_pin, GPIO_PIN_SET)
 
-#define RESET_LOW()  HAL_GPIO_WritePin(ILI9341_RESET_PORT, ILI9341_RESET_PIN, GPIO_PIN_RESET)
-#define RESET_HIGH() HAL_GPIO_WritePin(ILI9341_RESET_PORT, ILI9341_RESET_PIN, GPIO_PIN_SET)
+#define RESET_LOW()  HAL_GPIO_WritePin(ili_config->reset_port, ili_config->reset_pin, GPIO_PIN_RESET)
+#define RESET_HIGH() HAL_GPIO_WritePin(ili_config->reset_port, ili_config->reset_pin, GPIO_PIN_SET)
 
 static void ILI9341_Write(uint8_t *data, uint16_t size) {
-    HAL_SPI_Transmit(&ILI9341_SPI, data, size, HAL_MAX_DELAY);
+    HAL_SPI_Transmit(ili_config->hspi, data, size, HAL_MAX_DELAY);
 }
 
 void ILI9341_WriteCommand(uint8_t cmd) {
@@ -48,7 +47,8 @@ void ILI9341_Reset(void) {
     HAL_Delay(150);
 }
 
-void ILI9341_Init(void) {
+void ILI9341_Init(const ILI9341_Config_t *config) {
+    ili_config = config;
     ILI9341_Reset();
 
     ILI9341_WriteCommand(0x01);
@@ -155,7 +155,7 @@ void ILI9341_FillScreen(uint16_t color) {
     DC_HIGH();
     CS_LOW();
     for (int y = 0; y < 240; y++) {
-        HAL_SPI_Transmit(&ILI9341_SPI, line_buf, 320 * 2, HAL_MAX_DELAY);
+        HAL_SPI_Transmit(ili_config->hspi, line_buf, 320 * 2, HAL_MAX_DELAY);
     }
     CS_HIGH();
 }
@@ -203,7 +203,7 @@ void ILI9341_DrawBitmap(uint16_t w, uint16_t h, uint8_t *s)
     ILI9341_WriteCommand(0x2C); // Memory write
     DC_HIGH();
     CS_LOW();
-    HAL_SPI_Transmit(&ILI9341_SPI, s, w * h * 2, HAL_MAX_DELAY);
+    HAL_SPI_Transmit(ili_config->hspi, s, w * h * 2, HAL_MAX_DELAY);
     CS_HIGH();
 }
 
@@ -213,12 +213,12 @@ void ILI9341_DrawBitmapDMA(uint16_t w, uint16_t h, uint8_t *s, lv_display_t *dis
     DC_HIGH();
     CS_LOW();
     dma_display = disp;
-    HAL_SPI_Transmit_DMA(&ILI9341_SPI, s, w * h * 2);
+    HAL_SPI_Transmit_DMA(ili_config->hspi, s, w * h * 2);
 }
 
 void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
 {
-    if(hspi == &ILI9341_SPI) {
+    if(hspi == ili_config->hspi) {
         CS_HIGH();
         if(dma_display) {
             lv_display_flush_ready(dma_display);

@@ -48,11 +48,12 @@ static lv_display_t *disp = NULL;
  *   GLOBAL FUNCTIONS
  **********************/
 
-void lv_port_disp_init(void)
+void lv_port_disp_init(const ILI9341_Config_t *config)
 {
     /*-------------------------
      * Initialize your display
      * -----------------------*/
+    ILI9341_Init(config);
     disp_init();
 
     /*------------------------------------

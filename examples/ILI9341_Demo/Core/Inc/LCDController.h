@@ -16,6 +16,7 @@ extern "C" {
  *      INCLUDES
  *********************/
 #include "lvgl.h"
+#include "ILI9341.h"
 
 
 /*********************
@@ -30,7 +31,7 @@ extern "C" {
  * GLOBAL PROTOTYPES
  **********************/
 /* Initialize low level display driver */
-void lv_port_disp_init(void);
+void lv_port_disp_init(const ILI9341_Config_t *config);
 
 /* Enable updating the screen (the flushing process) when disp_flush() is called by LVGL
  */
