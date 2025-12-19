@@ -62,7 +62,7 @@ DMA_HandleTypeDef hdma_usart2_tx;
 osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
   .name = "defaultTask",
-  .stack_size = 128 * 8,
+  .stack_size = 256 * 8,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for uartTask */
@@ -72,9 +72,18 @@ const osThreadAttr_t uartTask_attributes = {
   .stack_size = 128 * 8,
   .priority = (osPriority_t) osPriorityLow,
 };
+/* Definitions for rtcTask */
+osThreadId_t rtcTaskHandle;
+const osThreadAttr_t rtcTask_attributes = {
+  .name = "rtcTask",
+  .stack_size = 128 * 8,
+  .priority = (osPriority_t) osPriorityLow,
+};
 /* USER CODE BEGIN PV */
 lv_obj_t *time_label = NULL;
 lv_obj_t *date_label = NULL;
+lv_obj_t *calendar = NULL;
+osMessageQueueId_t rtcQueueHandle;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -87,6 +96,7 @@ static void MX_SPI2_Init(void);
 static void MX_USART2_UART_Init(void);
 void StartDefaultTask(void *argument);
 void StartUartTask(void *argument);
+void StartRtcTask(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -95,12 +105,49 @@ void StartUartTask(void *argument);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+typedef struct {
+  uint8_t hours;
+  uint8_t minutes;
+  uint8_t seconds;
+  uint8_t day;
+  uint8_t month;
+  uint8_t year;
+  uint8_t weekday;
+} rtc_time_msg_t;
+
 static void uart2_print(const char *s)
 {
   if (s == NULL) {
     return;
   }
   (void)HAL_UART_Transmit(&huart2, (uint8_t*)s, (uint16_t)strlen(s), 200);
+}
+
+static void update_time_date_ui(const rtc_time_msg_t *msg)
+{
+  static const char *days[] = {"?","Mon","Tue","Wed","Thu","Fri","Sat","Sun"};
+  static const char *months[] = {"?","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
+  char time_str[32];
+  char date_str[64];
+
+  if (msg == NULL || time_label == NULL || date_label == NULL) {
+    return;
+  }
+
+  (void)snprintf(time_str, sizeof(time_str), "%02u:%02u:%02u",
+                 (unsigned)msg->hours, (unsigned)msg->minutes, (unsigned)msg->seconds);
+  lv_label_set_text(time_label, time_str);
+
+  const char *wd = (msg->weekday <= 7) ? days[msg->weekday] : "?";
+  const char *mo = (msg->month <= 12) ? months[msg->month] : "?";
+  (void)snprintf(date_str, sizeof(date_str), "%s, %s %u, 20%02u",
+                 wd, mo, (unsigned)msg->day, (unsigned)msg->year);
+  lv_label_set_text(date_label, date_str);
+
+  if (calendar != NULL) {
+    lv_calendar_set_today_date(calendar, 2000U + msg->year, msg->month, msg->day);
+    lv_calendar_set_showed_date(calendar, 2000U + msg->year, msg->month);
+  }
 }
 
 /* USER CODE END 0 */
@@ -186,14 +233,36 @@ int main(void)
   lv_label_set_text(time_label, "00:00:00");
   lv_obj_set_style_text_font(time_label, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_align(time_label, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_align(time_label, LV_ALIGN_CENTER, 0, -20);
+  lv_obj_align(time_label, LV_ALIGN_TOP_MID, 0, 6);
 
   /* Create date display */
   date_label = lv_label_create(lv_screen_active());
   lv_label_set_text(date_label, "Mon, Jan 1, 2025");
   lv_obj_set_style_text_font(date_label, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_align(date_label, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_align(date_label, LV_ALIGN_CENTER, 0, 40);
+  lv_obj_align(date_label, LV_ALIGN_TOP_MID, 0, 26);
+
+  /* Create calendar display */
+  calendar = lv_calendar_create(lv_screen_active());
+  lv_obj_set_size(calendar, 300, 170);
+  lv_obj_align(calendar, LV_ALIGN_BOTTOM_MID, 0, -6);
+
+  /* Prime UI with current RTC time/date if available */
+  RTC_TimeTypeDef sTime;
+  RTC_DateTypeDef sDate;
+  if (HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BIN) == HAL_OK) {
+    (void)HAL_RTC_GetDate(&hrtc, &sDate, RTC_FORMAT_BIN);
+    rtc_time_msg_t msg = {
+        .hours = sTime.Hours,
+        .minutes = sTime.Minutes,
+        .seconds = sTime.Seconds,
+        .day = sDate.Date,
+        .month = sDate.Month,
+        .year = sDate.Year,
+        .weekday = sDate.WeekDay,
+    };
+    update_time_date_ui(&msg);
+  }
 
   /* Force LVGL to process and render the clock display before starting scheduler */
   lv_timer_handler();
@@ -217,17 +286,28 @@ int main(void)
   /* USER CODE END RTOS_TIMERS */
 
   /* USER CODE BEGIN RTOS_QUEUES */
-  /* add queues, ... */
+  rtcQueueHandle = osMessageQueueNew(4, sizeof(rtc_time_msg_t), NULL);
+  if (rtcQueueHandle == NULL) {
+    Error_Handler();
+  }
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
   /* creation of defaultTask */
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+  if (defaultTaskHandle == NULL) {
+    Error_Handler();
+  }
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* creation of uartTask */
   uartTaskHandle = osThreadNew(StartUartTask, NULL, &uartTask_attributes);
   if (uartTaskHandle == NULL) {
+    Error_Handler();
+  }
+  /* creation of rtcTask */
+  rtcTaskHandle = osThreadNew(StartRtcTask, NULL, &rtcTask_attributes);
+  if (rtcTaskHandle == NULL) {
     Error_Handler();
   }
   /* USER CODE END RTOS_THREADS */
@@ -602,13 +682,7 @@ void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN 5 */
   (void)argument;  /* Unused parameter */
-  char time_str[32];
-  char date_str[64];
-  RTC_TimeTypeDef sTime;
-  RTC_DateTypeDef sDate;
-  static const char *days[] = {"?","Mon","Tue","Wed","Thu","Fri","Sat","Sun"};
-  static const char *months[] = {"?","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
-  uint8_t last_seconds = 0xFF;
+  rtc_time_msg_t msg;
   
   /* Infinite loop */
   for(;;)
@@ -619,27 +693,9 @@ void StartDefaultTask(void *argument)
     lv_tick_inc(5);
     lv_timer_handler();
 
-    /* Update UI when RTC seconds change (avoids reliance on HAL_GetTick) */
-    if (time_label != NULL && date_label != NULL) {
-      if (HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BIN) == HAL_OK) {
-        (void)HAL_RTC_GetDate(&hrtc, &sDate, RTC_FORMAT_BIN);
-
-        if (sTime.Seconds != last_seconds) {
-          last_seconds = sTime.Seconds;
-
-          snprintf(time_str, sizeof(time_str), "%02u:%02u:%02u",
-                   (unsigned)sTime.Hours, (unsigned)sTime.Minutes, (unsigned)sTime.Seconds);
-          lv_label_set_text(time_label, time_str);
-
-          const char *wd = (sDate.WeekDay <= 7) ? days[sDate.WeekDay] : "?";
-          const char *mo = (sDate.Month <= 12) ? months[sDate.Month] : "?";
-          snprintf(date_str, sizeof(date_str), "%s, %s %u, 20%02u",
-                   wd, mo, (unsigned)sDate.Date, (unsigned)sDate.Year);
-          lv_label_set_text(date_label, date_str);
-        }
-      } else {
-        lv_label_set_text(time_label, "RTC ERR");
-      }
+    while (rtcQueueHandle != NULL &&
+           osMessageQueueGet(rtcQueueHandle, &msg, NULL, 0) == osOK) {
+      update_time_date_ui(&msg);
     }
 
     osDelay(5);
@@ -687,6 +743,48 @@ void StartUartTask(void *argument)
     osDelay(1000);
   }
   /* USER CODE END StartUartTask */
+}
+
+/* USER CODE BEGIN Header_StartRtcTask */
+/**
+  * @brief  Function implementing the rtcTask thread.
+  * @param  argument: Not used
+  * @retval None
+  */
+/* USER CODE END Header_StartRtcTask */
+void StartRtcTask(void *argument)
+{
+  /* USER CODE BEGIN StartRtcTask */
+  (void)argument;
+  RTC_TimeTypeDef sTime;
+  RTC_DateTypeDef sDate;
+  uint8_t last_seconds = 0xFF;
+
+  for(;;)
+  {
+    if (HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BIN) == HAL_OK) {
+      (void)HAL_RTC_GetDate(&hrtc, &sDate, RTC_FORMAT_BIN);
+
+      if (sTime.Seconds != last_seconds) {
+        last_seconds = sTime.Seconds;
+        rtc_time_msg_t msg = {
+            .hours = sTime.Hours,
+            .minutes = sTime.Minutes,
+            .seconds = sTime.Seconds,
+            .day = sDate.Date,
+            .month = sDate.Month,
+            .year = sDate.Year,
+            .weekday = sDate.WeekDay,
+        };
+        if (rtcQueueHandle != NULL) {
+          (void)osMessageQueuePut(rtcQueueHandle, &msg, 0U, 0U);
+        }
+      }
+    }
+
+    osDelay(250);
+  }
+  /* USER CODE END StartRtcTask */
 }
 
 /**
