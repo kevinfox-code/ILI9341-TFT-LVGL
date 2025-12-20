@@ -44,6 +44,15 @@ endif()
 # Include root and optional parent path of LV_CONF_PATH
 target_include_directories(lvgl SYSTEM PUBLIC ${LVGL_ROOT_DIR} ${LV_CONF_DIR} ${CMAKE_CURRENT_BINARY_DIR})
 
+# Add CMSIS-RTOS2 include directories if available so lvgl's OS adapters can find cmsis_os2.h
+if(EXISTS "${CMAKE_SOURCE_DIR}/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2")
+  target_include_directories(lvgl SYSTEM PUBLIC "${CMAKE_SOURCE_DIR}/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2")
+endif()
+
+if(EXISTS "${CMAKE_SOURCE_DIR}/Drivers/CMSIS/RTOS2/Include")
+  target_include_directories(lvgl SYSTEM PUBLIC "${CMAKE_SOURCE_DIR}/Drivers/CMSIS/RTOS2/Include")
+endif()
+
 
 if(NOT LV_CONF_BUILD_DISABLE_THORVG_INTERNAL)
     add_library(lvgl_thorvg ${THORVG_SOURCES})
