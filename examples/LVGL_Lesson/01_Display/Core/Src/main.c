@@ -31,6 +31,8 @@
 /* USER CODE BEGIN Includes */
 #include "lvgl.h"
 #include "LCDController.h"
+#include "TouchController.h"
+#include "board_drivers.h"
 
 /* USER CODE END Includes */
 
@@ -65,16 +67,6 @@ void MX_FREERTOS_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-ILI9341_Config_t ili9341_cfg = {
-    .hspi = &hspi1,
-    .cs_port = CS_GPIO_Port,
-    .cs_pin = CS_Pin,
-    .dc_port = DC_GPIO_Port,
-    .dc_pin = DC_Pin,
-    .reset_port = RESET_GPIO_Port,
-    .reset_pin = RESET_Pin
-};
-
 /* USER CODE END 0 */
 
 /**
@@ -121,7 +113,8 @@ int main(void)
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
   lv_init();
-  lv_port_disp_init(&ili9341_cfg);
+  lv_port_disp_init(Board_GetDisplayConfig());
+  TouchController_Init(Board_GetTouchConfig());
   load_gui();
 
   /* USER CODE END 2 */

@@ -31,6 +31,7 @@
 #include "rtc.h"
 #include "usart.h"
 #include "lvgl.h"
+#include "TouchController.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <inttypes.h>
@@ -192,10 +193,10 @@ void MX_FREERTOS_Init(void) {
 void startNormalTask(void *argument)
 {
   /* USER CODE BEGIN startNormalTask */
-  /* Infinite loop */
+  /* Nothing to do — suspend indefinitely rather than burning CPU/context switches */
   for(;;)
   {
-    osDelay(1);
+    osDelay(osWaitForever);
   }
   /* USER CODE END startNormalTask */
 }
@@ -214,6 +215,7 @@ void startLvglTask(void *argument)
   for(;;)
   {
     osDelay(5);
+    TouchController_Poll();
     lv_timer_handler(); /* let LVGL handle tasks */
   }
   /* USER CODE END startLvglTask */
@@ -322,14 +324,18 @@ void StartUpdateTimeGui(void *argument)
       RTC_DateTypeDef sDate;
       HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BIN);
       HAL_RTC_GetDate(&hrtc, &sDate, RTC_FORMAT_BIN);
-      
+
       char time_str[16];
       snprintf(time_str, sizeof(time_str), "%02d:%02d:%02d", sTime.Hours, sTime.Minutes, sTime.Seconds);
-      lv_label_set_text(time_label, time_str);
-      
+
       char date_str[16];
       snprintf(date_str, sizeof(date_str), "%02d/%02d/20%02d", sDate.Month, sDate.Date, sDate.Year);
+
+      /* LVGL is not thread-safe — acquire the lock before touching any LVGL objects */
+      lv_lock();
+      lv_label_set_text(time_label, time_str);
       lv_label_set_text(date_label, date_str);
+      lv_unlock();
     }
   }
 }
