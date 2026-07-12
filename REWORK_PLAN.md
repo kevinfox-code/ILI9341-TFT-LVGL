@@ -646,6 +646,17 @@ Designer; the adapter can't be a compiled library without a TouchGFX tree). Writ
 
 ## 9. Phase 6 — CMake
 
+> **Status: DONE.** Root `CMakeLists.txt` defines the `tft_drivers` STATIC target
+> with all five options/cache vars, links `drv_platform` (if the consumer defined
+> it) and `lvgl` (if `DRV_ADAPTER_LVGL=ON` and the target exists). `cmake/
+> check_layering.cmake` + `cmake/layering_check_script.cmake` add a
+> `layering_check` build target (a dependency of `tft_drivers`) and CTest test,
+> verified to pass on the clean tree and to FATAL_ERROR when a forbidden include
+> is injected. `cmake -S . -B build && cmake --build build --target
+> layering_check && ctest` all verified locally (host toolchain — full ARM
+> compile of `tft_drivers` itself needs `drv_platform` wired up in Phase 8's
+> example, since the sources include the real HAL headers via `drv_config.h`).
+
 ### 9.1 Library `CMakeLists.txt` (repo root)
 
 ```cmake
