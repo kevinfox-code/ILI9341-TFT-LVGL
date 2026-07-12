@@ -1,0 +1,109 @@
+{
+    "version": "2.0.0",
+    // Pin PATH to the STM32CubeCLT toolchain so configure/build always pick
+    // up its arm-none-eabi-gcc. Other arm-none-eabi-gcc installs exist on
+    // this machine (Homebrew, the STM32Cube VSCode extension's own bundle)
+    // and whichever one PATH resolves first gets baked into the CMake
+    // cache for that build dir — the Homebrew one has an incomplete
+    // sysroot (missing stdint.h) and silently poisons the cache if it wins.
+    "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+            "PATH": "/opt/ST/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin:/opt/ST/STM32CubeCLT_1.18.0/CMake/bin:/opt/ST/STM32CubeCLT_1.18.0/Ninja/bin:/opt/ST/STM32CubeCLT_1.18.0/STM32CubeProgrammer/bin:${env:PATH}"
+        }
+    },
+    "tasks": [
+        // --- Configure ---
+        {
+            "label": "Configure Debug",
+            "type": "shell",
+            "command": "cmake --preset Debug",
+            "problemMatcher": [],
+            "group": "build"
+        },
+        {
+            "label": "Configure Release",
+            "type": "shell",
+            "command": "cmake --preset Release",
+            "problemMatcher": [],
+            "group": "build"
+        },
+        // --- Clean ---
+        {
+            "label": "Clean Debug",
+            "type": "shell",
+            "command": "cmake --build build/Debug --target clean",
+            "problemMatcher": [],
+            "group": "build"
+        },
+        {
+            "label": "Clean Release",
+            "type": "shell",
+            "command": "cmake --build build/Release --target clean",
+            "problemMatcher": [],
+            "group": "build"
+        },
+        // --- Build ---
+        {
+            "label": "Build Debug",
+            "type": "shell",
+            "command": "cmake --build --preset Debug",
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "Build Release",
+            "type": "shell",
+            "command": "cmake --build --preset Release",
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": "build"
+        },
+        // --- Flash ---
+        {
+            "label": "Flash Debug",
+            "type": "shell",
+            "command": "STM32_Programmer_CLI -c port=SWD -w build/Debug/01_Display.elf -v -rst",
+            "problemMatcher": [],
+            "group": "build"
+        },
+        {
+            "label": "Flash Release",
+            "type": "shell",
+            "command": "STM32_Programmer_CLI -c port=SWD -w build/Release/01_Display.elf -v -rst",
+            "problemMatcher": [],
+            "group": "build"
+        },
+        // --- Combo: Clean + Build + Flash ---
+        {
+            "label": "Clean Build Flash Debug",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "Configure Debug",
+                "Clean Debug",
+                "Build Debug",
+                "Flash Debug"
+            ],
+            "problemMatcher": [],
+            "group": "build"
+        },
+        {
+            "label": "Clean Build Flash Release",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "Configure Release",
+                "Clean Release",
+                "Build Release",
+                "Flash Release"
+            ],
+            "problemMatcher": [],
+            "group": "build"
+        }
+    ]
+}

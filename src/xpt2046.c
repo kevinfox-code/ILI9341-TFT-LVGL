@@ -27,6 +27,8 @@ struct xpt2046 {
 
 static struct xpt2046 s_instances[XPT2046_MAX_INSTANCES];
 
+volatile xpt2046_debug_t g_xpt2046_debug;
+
 static uint16_t spi_xfer(xpt2046_t *t, uint8_t cmd)
 {
     uint8_t tx[3] = { cmd, 0, 0 };
@@ -125,10 +127,17 @@ bool XPT2046_ReadPoint(xpt2046_t *t, uint16_t *px, uint16_t *py,
         return false;
     }
 
+    g_xpt2046_debug.read_count++;
+
     uint16_t rx, ry;
     if (!XPT2046_ReadRaw(t, &rx, &ry)) {
+        g_xpt2046_debug.pen_down = 0;
         return false;
     }
+    g_xpt2046_debug.pen_down = 1;
+    g_xpt2046_debug.press_count++;
+    g_xpt2046_debug.raw_x = rx;
+    g_xpt2046_debug.raw_y = ry;
 
     drv_mutex_lock(t->cal_mutex, DRV_OS_WAIT_FOREVER);
     uint16_t xmin = t->raw_x_min, xmax = t->raw_x_max;
@@ -165,6 +174,8 @@ bool XPT2046_ReadPoint(xpt2046_t *t, uint16_t *px, uint16_t *py,
 
     *px = (uint16_t)x;
     *py = (uint16_t)y;
+    g_xpt2046_debug.px = *px;
+    g_xpt2046_debug.py = *py;
     return true;
 }
 

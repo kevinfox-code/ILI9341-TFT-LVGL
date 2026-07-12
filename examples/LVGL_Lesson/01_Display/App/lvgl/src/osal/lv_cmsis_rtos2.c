@@ -81,9 +81,13 @@ lv_result_t lv_thread_delete(lv_thread_t * thread)
 
 lv_result_t lv_mutex_init(lv_mutex_t * mutex)
 {
+    /* Upstream also requested osMutexRobust here, but the CMSIS-FreeRTOS
+     * wrapper rejects it (FreeRTOS has no robust mutexes) and osMutexNew
+     * returns NULL — leaving lv_general_mutex NULL so every lv_lock()
+     * failed instantly and LVGL ran with no locking at all. */
     const osMutexAttr_t Thread_Mutex_attr = {
         "LVGLMutex",
-        osMutexRecursive | osMutexPrioInherit | osMutexRobust,
+        osMutexRecursive | osMutexPrioInherit,
     };
 
     *mutex = osMutexNew(&Thread_Mutex_attr);
@@ -98,7 +102,12 @@ lv_result_t lv_mutex_init(lv_mutex_t * mutex)
 
 lv_result_t lv_mutex_lock(lv_mutex_t * mutex)
 {
-    osStatus_t status = osMutexAcquire(*mutex, 0U);
+    /* Upstream used a 0 timeout here, which never blocks: under contention
+     * it just warned and returned, so lv_lock() gave no mutual exclusion
+     * and concurrent lv_* calls raced the render loop (e.g. tripping the
+     * "Invalidate area is not allowed during rendering" assert). A lock
+     * must wait. */
+    osStatus_t status = osMutexAcquire(*mutex, osWaitForever);
     if(status != osOK)  {
         LV_LOG_WARN("Error: failed to lock cmsis-rtos2 mutex %d", (int)status);
         return LV_RESULT_INVALID;

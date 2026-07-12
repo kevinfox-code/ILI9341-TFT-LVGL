@@ -11,8 +11,21 @@ set(CMAKE_C_COMPILER_ID GNU)
 set(CMAKE_CXX_COMPILER_ID GNU)
 
 # Some default GCC settings
-# arm-none-eabi- must be part of path environment
-set(TOOLCHAIN_PREFIX                arm-none-eabi-)
+#
+# Resolve arm-none-eabi-gcc explicitly rather than trusting whichever one
+# PATH turns up first: this machine has three installs (Homebrew,
+# STM32CubeCLT, and the STM32Cube VSCode extension's own bundle), and
+# Homebrew's ships an incomplete sysroot (missing stdint.h) that silently
+# poisons the CMake cache for whichever build dir gets configured while it
+# wins the PATH race — including background auto-configures triggered by
+# the IDE, not just interactive shells. HINTS is searched before the
+# default PATH locations, so this pins the STM32CubeCLT toolchain when
+# present while still falling back to PATH on other machines.
+find_program(ARM_NONE_EABI_GCC arm-none-eabi-gcc
+    HINTS /opt/ST/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin
+)
+get_filename_component(TOOLCHAIN_BIN_DIR ${ARM_NONE_EABI_GCC} DIRECTORY)
+set(TOOLCHAIN_PREFIX                ${TOOLCHAIN_BIN_DIR}/arm-none-eabi-)
 
 set(CMAKE_C_COMPILER                ${TOOLCHAIN_PREFIX}gcc)
 set(CMAKE_ASM_COMPILER              ${CMAKE_C_COMPILER})

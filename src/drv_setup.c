@@ -19,6 +19,12 @@ static void drv_hal_spi_tx_cplt_cb(SPI_HandleTypeDef *hspi)
 
 drv_status_t DRV_Setup(void)
 {
+#if defined(DRV_PROVIDE_HAL_CALLBACKS) && (DRV_PROVIDE_HAL_CALLBACKS == 1)
+    /* Keeps drv_isr_glue.o in the link; see the comment on the anchor. */
+    extern void drv_isr_glue_anchor(void);
+    drv_isr_glue_anchor();
+#endif
+
     drv_spi_bus_t *disp_bus = drv_spi_bus_create((void *)DRV_DISP_SPI_HANDLE);
     if (disp_bus == NULL) {
         return DRV_ERR_HW;

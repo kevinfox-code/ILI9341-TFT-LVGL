@@ -66,7 +66,7 @@ static const osThreadAttr_t k_lvgl_task_attr = {
 };
 static const osThreadAttr_t k_below_normal_attr = {
     .name = "belowNormalTask",
-    .stack_size = 128 * 4,
+    .stack_size = 512 * 4,
     .priority = (osPriority_t)osPriorityBelowNormal,
 };
 static const osThreadAttr_t k_read_time_attr = {
@@ -96,6 +96,11 @@ static void lvgl_tick_timer_cb(void *arg)
 static void lvgl_task(void *arg)
 {
     (void)arg;
+    /* Display/touch/LVGL bring-up must happen in task context: pre-kernel,
+     * the first FreeRTOS object creation masks interrupts until
+     * osKernelStart(), so the HAL tick is dead and the driver's reset-pulse
+     * HAL_Delay() never returns. */
+    App_Init();
     for (;;) {
         osDelay(5);
         lv_timer_handler();

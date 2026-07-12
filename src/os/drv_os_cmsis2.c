@@ -13,10 +13,14 @@ static bool kernel_running(void)
 
 drv_mutex_t drv_mutex_create(const char *name)
 {
-    osMutexAttr_t attr = {0};
+    /* Backed by a binary semaphore, not osMutexNew: the ILI9341 async-flush
+     * contract releases the bus lock from the SPI/DMA tx-complete ISR, and a
+     * CMSIS-RTOS2 mutex cannot be released from ISR context (osErrorISR
+     * leaves it permanently owned, deadlocking the next lock). A semaphore
+     * can. The trade-off is losing priority inheritance. */
+    osSemaphoreAttr_t attr = {0};
     attr.name = name;
-    attr.attr_bits = osMutexPrioInherit;
-    return (drv_mutex_t)osMutexNew(&attr);
+    return (drv_mutex_t)osSemaphoreNew(1u, 1u, &attr);
 }
 
 static uint32_t ms_to_ticks(uint32_t timeout_ms)
@@ -43,7 +47,7 @@ drv_status_t drv_mutex_lock(drv_mutex_t m, uint32_t timeout_ms)
     if (drv_in_isr()) {
         return DRV_ERR_STATE;
     }
-    osStatus_t st = osMutexAcquire((osMutexId_t)m, ms_to_ticks(timeout_ms));
+    osStatus_t st = osSemaphoreAcquire((osSemaphoreId_t)m, ms_to_ticks(timeout_ms));
     if (st == osOK) {
         return DRV_OK;
     }
@@ -61,7 +65,7 @@ drv_status_t drv_mutex_unlock(drv_mutex_t m)
     if (!kernel_running()) {
         return DRV_OK;
     }
-    osStatus_t st = osMutexRelease((osMutexId_t)m);
+    osStatus_t st = osSemaphoreRelease((osSemaphoreId_t)m);
     return (st == osOK) ? DRV_OK : DRV_ERR_HW;
 }
 

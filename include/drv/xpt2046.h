@@ -23,6 +23,20 @@ typedef struct {
 
 typedef struct xpt2046 xpt2046_t;
 
+/* Debug snapshot of the most recent touch activity, updated on every
+ * XPT2046_ReadPoint() call. Not part of the driver logic — exists so a
+ * debugger live watch (e.g. Cortex-Debug "Live Watch") can monitor touch
+ * behavior without halting the target. Watch `g_xpt2046_debug`. */
+typedef struct {
+    uint16_t raw_x, raw_y;     /* last raw ADC pair (valid while pen down)   */
+    uint16_t px, py;           /* last mapped screen coordinates             */
+    uint8_t  pen_down;         /* 1 while the panel reports a press          */
+    uint32_t read_count;       /* total ReadPoint polls                      */
+    uint32_t press_count;      /* polls that returned a valid press          */
+} xpt2046_debug_t;
+
+extern volatile xpt2046_debug_t g_xpt2046_debug;
+
 drv_status_t XPT2046_Init(xpt2046_t **out, const xpt2046_config_t *cfg);
 bool         XPT2046_PenDown(xpt2046_t *t);                 /* reads PENIRQ GPIO */
 bool         XPT2046_ReadRaw(xpt2046_t *t, uint16_t *rx, uint16_t *ry);

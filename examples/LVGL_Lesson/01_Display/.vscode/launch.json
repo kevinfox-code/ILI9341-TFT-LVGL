@@ -5,18 +5,50 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "type": "stlinkgdbtarget",
+            // Cortex-Debug with Live Watch: add `g_xpt2046_debug` in the
+            // LIVE WATCH panel to monitor touch coordinates in real time
+            // without halting the target.
+            "name": "Cortex-Debug: Launch (Live Watch)",
+            "type": "cortex-debug",
             "request": "launch",
-            "name": "STM32Cube: STM32 Launch ST-Link GDB Server",
-            "origin": "snippet",
             "cwd": "${workspaceFolder}",
-            "preBuild": "${command:st-stm32-ide-debug-launch.build}",
-            "runEntry": "main",
-            "imagesAndSymbols": [
-                {
-                    "imageFileName": "${command:st-stm32-ide-debug-launch.get-projects-binary-from-context1}"
-                }
-            ]
+            "executable": "${workspaceFolder}/build/Debug/01_Display.elf",
+            "servertype": "openocd",
+            "serverpath": "/Library/xPacks/xpack-openocd-0.12.0-7/bin/openocd",
+            "gdbPath": "/opt/ST/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/arm-none-eabi-gdb",
+            "configFiles": [
+                "interface/stlink.cfg",
+                "target/stm32f4x.cfg"
+            ],
+            "device": "STM32F446RE",
+            "svdFile": "/opt/ST/STM32CubeCLT_1.18.0/STMicroelectronics_CMSIS_SVD/STM32F446.svd",
+            "runToEntryPoint": "main",
+            "liveWatch": {
+                "enabled": true,
+                "samplesPerSecond": 4
+            }
+        },
+        {
+            // Same, but attaches to the already-running firmware without
+            // reflashing or resetting — best for watching touch behavior.
+            "name": "Cortex-Debug: Attach (Live Watch)",
+            "type": "cortex-debug",
+            "request": "attach",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/build/Debug/01_Display.elf",
+            "servertype": "openocd",
+            "serverpath": "/Library/xPacks/xpack-openocd-0.12.0-7/bin/openocd",
+            "gdbPath": "/opt/ST/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/arm-none-eabi-gdb",
+            "configFiles": [
+                "interface/stlink.cfg",
+                "target/stm32f4x.cfg"
+            ],
+            "device": "STM32F446RE",
+            "svdFile": "/opt/ST/STM32CubeCLT_1.18.0/STMicroelectronics_CMSIS_SVD/STM32F446.svd",
+            "liveWatch": {
+                "enabled": true,
+                "samplesPerSecond": 4
+            }
         },
         {
             "type": "stlinkgdbtarget",

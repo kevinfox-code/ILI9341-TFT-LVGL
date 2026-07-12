@@ -422,6 +422,16 @@ Enable the EXTI line for `T_IRQ` in **NVIC** at priority **5**.
 > Set `T_IRQ` pull to **No pull** if the display board has a hardware
 > pull-up (most do); **Pull-up** if unsure.
 
+### Complete wiring note
+
+The chip-select pins are active-low and should be left deasserted at reset, so
+CubeMX should initialize `CS`, `T_CS`, and the other control outputs **high**.
+The touch interrupt pin `T_IRQ` is also active-low: configure it as a
+falling-edge EXTI input, with a pull-up if the board does not provide one.
+Display SPI TX-complete and touch EXTI callbacks are forwarded through the
+driver ISR hooks described in [Interrupt wiring](#interrupt-wiring); `main.c`
+and `freertos.c` only need the `App_*` calls shown above.
+
 ### Step 5 — FreeRTOS [CubeMX]
 
 1. Enable **FreeRTOS** under **Middleware** → **CMSIS-RTOS V2** API.

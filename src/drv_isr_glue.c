@@ -20,6 +20,15 @@
 #include "drv/drv_isr.h"
 #include "drv/drv_config.h"
 
+/* Called from DRV_Setup() purely to reference this object file. The weak HAL
+ * callback overrides below are the only other symbols here, and a linker
+ * never extracts a static-archive member just to override a weak definition —
+ * without a strong referenced symbol this file silently drops out of the
+ * link and the DMA tx-complete callback becomes the HAL's no-op default. */
+void drv_isr_glue_anchor(void)
+{
+}
+
 #if !(defined(USE_HAL_SPI_REGISTER_CALLBACKS) && (USE_HAL_SPI_REGISTER_CALLBACKS == 1))
 
 void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
