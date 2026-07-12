@@ -698,6 +698,26 @@ violation. Wire it into CTest.
 
 ## 10. Phase 7 — Testing
 
+> **Status: DONE.** `tests/host/` vendors Unity (fetched from upstream,
+> `tests/host/vendor/unity/`), implements `mocks/{mock_seq,mock_os,mock_gpio,
+> mock_spi}` and `mocks/mock_hal_tick.c` (a real-wall-clock `HAL_Delay`/
+> `HAL_GetTick` stand-in used only by the bare-metal OSAL test), and all six
+> required test files (`test_ili9341_init`, `test_ili9341_window`,
+> `test_ili9341_flush_async`, `test_xpt2046_read`, `test_xpt2046_mapping`,
+> `test_osal_baremetal`) covering every case listed in the plan. `src/os/
+> drv_os_baremetal.c`'s Cortex-M inline asm is now guarded to `__arm__ &&
+> !__aarch64__` with host-safe fallbacks so the real bare-metal backend links
+> and runs directly on the host (Apple Silicon caught the original
+> `defined(__ARM_ARCH)` guard being too broad — aarch64 also defines it).
+> `cd tests/host && ./run.sh` → **7/7 passing** (5 driver suites + the OSAL
+> suite + `layering_check` wired into the same CTest run). Moved
+> `hardware_smoke_checklist.md` to `tests/target/` and extended it with the
+> two new items from §10.2 (concurrent shared-bus stress, DMA soak with
+> `DRV_DROP_FRAME_IF_BUSY=0`); `tests/target/selftest.c` is deferred to
+> whoever builds the Phase 8 example, since it needs real target buffers.
+
+
+
 ### 10.1 Host unit tests (`tests/host/`)
 
 Standalone CMake project (`tests/host/CMakeLists.txt`) built for the **host**

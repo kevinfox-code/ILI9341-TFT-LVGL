@@ -4,8 +4,16 @@
 extern void HAL_Delay(uint32_t Delay);
 extern uint32_t HAL_GetTick(void);
 
+#if defined(__arm__) && !defined(__aarch64__)
 static inline void bm_disable_irq(void) { __asm volatile ("cpsid i" ::: "memory"); }
 static inline void bm_enable_irq(void)  { __asm volatile ("cpsie i" ::: "memory"); }
+#else
+/* Host build (unit tests): no real interrupts to mask; critical sections
+ * are a no-op here since the test process provides its own concurrency
+ * story (see tests/host). */
+static inline void bm_disable_irq(void) {}
+static inline void bm_enable_irq(void)  {}
+#endif
 
 typedef struct {
     volatile uint8_t locked;
@@ -129,9 +137,13 @@ uint32_t drv_tick_ms(void)
 
 bool drv_in_isr(void)
 {
+#if defined(__arm__) && !defined(__aarch64__)
     uint32_t ipsr;
     __asm volatile ("mrs %0, ipsr" : "=r" (ipsr));
     return ipsr != 0u;
+#else
+    return false;
+#endif
 }
 
 bool drv_os_kernel_running(void)
