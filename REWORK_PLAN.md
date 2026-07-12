@@ -556,6 +556,18 @@ existing README text over.
 
 ## 7. Phase 4 — Layer 2: LVGL adapter (`adapters/lvgl/`)
 
+> **Status: DONE.** `adapters/lvgl/lv_ili9341.{h,c}`, `lv_xpt2046.{h,c}`,
+> `lv_touch_calibrate.{h,c}` implemented, plus `include/drv/drv_policy.h` for the
+> `DRV_DROP_FRAME_IF_BUSY` / `DRV_DMA_BUSY_WAIT_TIMEOUT_MS` knobs. Added a small
+> non-breaking addition to the Layer-1 contract: `ILI9341_GetResolution()` (not
+> in the original snippet, needed so the adapter can size `lv_display_create()`
+> without the adapter reaching into the opaque `ili9341_t`). The stalled-transfer
+> double-flush-ready race is closed via a per-adapter `pending` pointer cleared
+> under a critical section by whichever of {done_cb, timeout path} gets there
+> first. `grep -rl 'lvgl.h' include/ src/ adapters/` → only the three
+> `adapters/lvgl/*.h` files. `DRV_ADAPTER_LVGL=OFF`/`nm` zero-`lv_`-symbols check
+> deferred to Phase 6 once the CMake target exists.
+
 Compiled only when CMake option `DRV_ADAPTER_LVGL=ON`. Links against the app's
 `lvgl` target. Replaces `LCDController.*` and `TouchController.*`.
 

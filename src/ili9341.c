@@ -427,6 +427,15 @@ drv_status_t ILI9341_WaitFlushDone(ili9341_t *d, uint32_t timeout_ms)
     return DRV_OK;
 }
 
+void ILI9341_GetResolution(ili9341_t *d, uint16_t *hor_res, uint16_t *ver_res)
+{
+    if (d == NULL) {
+        return;
+    }
+    if (hor_res) *hor_res = d->hor_res;
+    if (ver_res) *ver_res = d->ver_res;
+}
+
 drv_status_t ILI9341_Sleep(ili9341_t *d, bool on)
 {
     if (d == NULL) {

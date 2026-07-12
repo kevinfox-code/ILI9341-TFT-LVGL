@@ -38,6 +38,7 @@ drv_status_t ILI9341_FlushAsync(ili9341_t *d, uint16_t x0, uint16_t y0, uint16_t
 bool         ILI9341_FlushBusy(ili9341_t *d);
 drv_status_t ILI9341_WaitFlushDone(ili9341_t *d, uint32_t timeout_ms);
 drv_status_t ILI9341_Sleep(ili9341_t *d, bool on);   /* 0x10 / 0x11 + delays */
+void         ILI9341_GetResolution(ili9341_t *d, uint16_t *hor_res, uint16_t *ver_res);
 
 #ifdef __cplusplus
 }
