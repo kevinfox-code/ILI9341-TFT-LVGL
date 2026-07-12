@@ -359,6 +359,15 @@ first error encountered.
 
 ## 5. Phase 2 — Layer 1: harden the chip drivers
 
+> **Status: DONE.** `src/ili9341.c` and `src/xpt2046.c` implemented against the
+> Phase-1 headers. Preserves the exact known-good init byte sequence and MADCTL
+> values; adds bus locking/unlock on every path, DMA chunking for full-frame
+> flushes, `DrawPixel`, capped `FillScreen` line buffer, calibration-mutex-guarded
+> touch calibration, and rotation-aware `ReadPoint` (rotation 3 matches the
+> legacy empirically-validated mapping; 0/1/2 derived from it and **must be
+> re-verified on hardware** — flagged for the Phase 7 smoke checklist).
+> `grep -n 'HAL_' include/drv/ili9341.h include/drv/xpt2046.h` → empty.
+
 ### 5.1 `include/drv/ili9341.h` / `src/ili9341.c`
 
 Rewrite from the current `Display/ILI9341.c`. Public API:
