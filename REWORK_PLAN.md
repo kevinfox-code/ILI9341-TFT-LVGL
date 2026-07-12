@@ -893,6 +893,21 @@ Steps:
 
 ## 12. Phase 9 — Documentation
 
+> **Status: DONE.** `README.md` rewritten covering the new layout, the full
+> `drv_constants.h` macro table (including the app-level `APP_*` extension
+> pattern from Phase 8), the `drv_platform` CMake contract, the bring-up
+> recipe, interrupt wiring (both strategies), a bare-metal no-RTOS main-loop
+> example, an LVGL adapter section, the TouchGFX pointer, testing
+> instructions, and the retargeted CubeMX steps 1–7 (Step 2 now recommends
+> enabling SPI "Register Callbacks"; Step 7 targets `Profiles/board_1/`).
+> `RELEASE_NOTES.md` gained a v2.0.0 section on top of the existing v1.0.0
+> notes, with the full old-API → new-API breaking-changes table and a
+> "fixed as part of this rework" pointer to Appendix A. **This closes out
+> REWORK_PLAN.md — all 9 phases done, acceptance criteria met, host tests
+> green, the example builds and links against a real arm-none-eabi
+> toolchain. The hardware smoke checklist (`tests/target/`) is the
+> remaining gate and is handed to the user for the final on-target pass.**
+
 1. Rewrite `README.md`: new layout, the `drv_constants.h` contract (full macro
    table), the `drv_platform` CMake contract, bring-up recipe for the
    `App/` + `Profiles/` shape, interrupt wiring section (both strategies from

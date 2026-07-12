@@ -1,87 +1,364 @@
-# ILI9341 TFT + XPT2046 Touch Driver for STM32 + LVGL
+# tft_drivers — ILI9341 TFT + XPT2046 Touch, CubeMX-Decoupled, RTOS-Safe
 
-Lightweight display and touch drivers for the 2.8" ILI9341 SPI TFT with XPT2046
-resistive touchscreen, fully integrated with LVGL v9 and FreeRTOS on STM32F4.
+Layered display and touch drivers for the 2.8" ILI9341 SPI TFT with XPT2046
+resistive touchscreen. Layer 0 (OS abstraction + SPI/GPIO ports) and Layer 1
+(chip drivers) are CubeMX-free and work identically on bare metal or
+CMSIS-RTOS2/FreeRTOS; an optional LVGL adapter (and TouchGFX integration
+notes) sit on top.
 
 **Tested on:** STM32F446RE (Nucleo-64)
-**LVGL version:** 9.2.2
-**HAL:** STM32 HAL (CubeMX-generated)
+**LVGL version:** 9.2.x
+**HAL:** STM32 HAL (CubeMX-generated), reached only through `drv_constants.h`
 
 ---
 
-## Installation
+## Architecture
 
-Clone or download this repository and place it inside your project's `Drivers/` folder:
-
-```bash
-# As a git submodule (recommended)
-git submodule add <repo-url> Drivers/ILI9341-TFT-LVGL
-
-# Or copy manually
-cp -r ILI9341-TFT-LVGL/ your_project/Drivers/
+```
+┌──────────────────────────────────────────────────────────┐
+│  Application (bare-metal loop / FreeRTOS tasks)           │
+├─────────────────────────────┬────────────────────────────┤
+│  adapters/lvgl (optional)   │  adapters/touchgfx (opt.)  │  Layer 2
+├─────────────────────────────┴────────────────────────────┤
+│  ili9341.c        xpt2046.c                               │  Layer 1 (chip drivers)
+├───────────────────────────────────────────────────────────┤
+│  drv_spi  drv_gpio  drv_os  drv_isr                       │  Layer 0 (ports + OSAL)
+├───────────────────────────────────────────────────────────┤
+│  STM32 HAL  ←  handles/pins supplied via drv_constants.h  │
+└───────────────────────────────────────────────────────────┘
 ```
 
-After adding LVGL (`Drivers/lvgl/`) and generating your CubeMX project, add the following
-to your `CMakeLists.txt`:
-
-```cmake
-target_sources(${PROJECT_NAME} PRIVATE
-    Drivers/ILI9341-TFT-LVGL/Board/board_drivers.c
-    Drivers/ILI9341-TFT-LVGL/Display/ILI9341.c
-    Drivers/ILI9341-TFT-LVGL/Display/LCDController.c
-    Drivers/ILI9341-TFT-LVGL/Display/XPT2046.c
-    Drivers/ILI9341-TFT-LVGL/Display/TouchController.c
-)
-
-target_include_directories(${PROJECT_NAME} PRIVATE
-    Drivers/ILI9341-TFT-LVGL/Board
-    Drivers/ILI9341-TFT-LVGL/Display
-    Drivers                          # for lv_conf.h
-)
-
-target_compile_definitions(${PROJECT_NAME} PRIVATE
-    FREERTOS                         # enables RTOS-aware code paths
-    BOARD_STM32F446                  # or BOARD_STM32F411
-)
-```
+**Include-direction rule:** Layer 1 includes only Layer 0 headers + libc.
+Layer 0 port implementations (`src/port/`, `src/drv_setup.c`,
+`src/drv_isr_glue.c`) are the only files that see the STM32 HAL, and only via
+`drv_config.h`. No layer includes `lvgl.h` except `adapters/lvgl/`. This is
+enforced by `cmake/layering_check_script.cmake`, wired into both the
+`layering_check` build target and CTest.
 
 ---
 
-## Repository Structure
+## Repository layout
 
 ```text
-ILI9341-TFT-LVGL/                        ← add this folder to your Drivers/
-├── Display/
-│   ├── ILI9341.h / .c                   # Low-level SPI display driver
-│   ├── LCDController.h / .c             # LVGL display port adapter
-│   ├── XPT2046.h / .c                   # Low-level SPI touch driver
-│   ├── TouchController.h / .c           # LVGL input device adapter
-│   └── display_runtime_config.h         # Timing policy compile-time knobs
-├── Board/
-│   ├── board_config.h                   # Contract gate + board selector
-│   ├── board_drivers.h / .c             # Immutable config getters
-│   └── boards/
-│       ├── board_stm32f446.h            # STM32F446 pin/SPI mappings
-│       └── board_stm32f411.h            # STM32F411 template
-├── datasheets/
-│   ├── ILI9341.pdf
-│   ├── xpt2046-datasheet.pdf
-│   └── mb1136-default-c04_schematic.pdf
-└── examples/
-    └── LVGL_Lesson/01_Display/          # Working reference project (STM32F446)
-        ├── Core/Src/main.c              # Init sequence + load_gui()
-        ├── Core/Src/freertos.c          # Task definitions + LVGL tick timer
-        └── Drivers/lv_conf.h            # LVGL configuration
+ILI9341-TFT-LVGL/
+├── CMakeLists.txt                    # tft_drivers static-library target (+ options)
+├── include/drv/                      # public headers — #include "drv/xxx.h"
+│   ├── drv_os.h / drv_spi.h / drv_gpio.h   # Layer 0 contracts
+│   ├── drv_config.h                  # contract gate: pulls in drv_constants.h
+│   ├── drv_isr.h                     # ISR entry points the app routes to
+│   ├── drv_setup.h                   # one-call bring-up (DRV_Setup)
+│   ├── drv_policy.h                  # LVGL adapter flush-policy knobs
+│   ├── ili9341.h / xpt2046.h         # Layer 1 chip drivers
+├── src/
+│   ├── os/                           # drv_os_cmsis2.c / drv_os_baremetal.c
+│   ├── port/                         # drv_spi_stm32.c / drv_gpio_stm32.c
+│   ├── ili9341.c / xpt2046.c
+│   ├── drv_setup.c                   # \
+│   └── drv_isr_glue.c                # / only files that reference DRV_* macros
+├── adapters/
+│   ├── lvgl/                         # lv_ili9341, lv_xpt2046, lv_touch_calibrate
+│   └── touchgfx/README.md            # integration notes + skeleton (no compiled code)
+├── templates/drv_constants_template.h  # copy this to App/drv_constants.h
+├── tests/
+│   ├── host/                         # host unit tests (no ARM toolchain needed)
+│   └── target/hardware_smoke_checklist.md
+├── examples/LVGL_Lesson/01_Display/  # reference App/ + Profiles/board_1/ project
+└── datasheets/
 ```
 
+A project consuming this library (also the example's shape):
+
+```text
+<project-root>/
+├── CMakeLists.txt                    # top-level glue (yours, never regenerated)
+├── App/
+│   ├── CMakeLists.txt
+│   ├── drv_constants.h               # THE connector: DRV_* macros → CubeMX symbols
+│   ├── app_main.c / app_main.h       # App_Init() / App_CreateTasks(), called from main.c
+│   ├── gui/                          # LVGL screens (or a TouchGFX Application)
+│   └── lvgl/                         # LVGL source + lv_conf.h (vendored, not CubeMX output)
+└── Profiles/
+    └── board_1/                      # 100% CubeMX-generated output for this board
+        ├── board_1.ioc
+        ├── Core/ (Inc, Src)          # main.c, stm32f4xx_it.c, FreeRTOSConfig.h, ...
+        ├── Drivers/ (CMSIS, STM32F4xx_HAL_Driver)
+        ├── Middlewares/ (FreeRTOS)
+        ├── cmake/stm32cubemx/CMakeLists.txt
+        ├── startup_stm32f446xx.s
+        └── STM32F446XX_FLASH.ld
+```
+
+**Rule:** nothing outside `Profiles/<name>/` is ever touched by CubeMX
+regeneration, and the only lines added inside it live in `USER CODE` blocks
+(see [Wiring App_Init/App_CreateTasks](#wiring-app_init--app_createtasks)
+below — `main.c` and `freertos.c` each need exactly one include and one
+function call there).
+
 ---
 
-## From-Scratch Setup on a New CubeMX Project
+## The `drv_constants.h` contract
 
-Follow every step in order. Steps marked **[CubeMX]** are done inside STM32CubeMX before
-code generation. Steps marked **[Code]** are manual edits after generation.
+This is the **only** file, on either side of the tft_drivers/App boundary,
+that includes a CubeMX header (`main.h`, `spi.h`, ...). Copy
+`templates/drv_constants_template.h` to `App/drv_constants.h` and fill in
+every macro — `drv_config.h` will `#error` with a clear message if any are
+missing, and validates resolution/rotation/calibration ranges at compile
+time.
+
+| Macro | Meaning |
+| --- | --- |
+| `DRV_HAL_HEADER` | HAL family header string, e.g. `"stm32f4xx_hal.h"` |
+| `DRV_DISP_SPI_MX_INIT()` / `DRV_TOUCH_SPI_MX_INIT()` | CubeMX re-init hooks (error recovery, baud change) |
+| `DRV_DISP_SPI_HANDLE` | `&hspi1` or similar |
+| `DRV_DISP_CS_PORT` / `_PIN`, `_DC_*`, `_RESET_*` | Display GPIO |
+| `DRV_DISP_HOR_RES` / `_VER_RES` | Logical resolution after rotation |
+| `DRV_DISP_ROTATION` | 0–3 |
+| `DRV_TOUCH_SPI_HANDLE` | May equal `DRV_DISP_SPI_HANDLE` (shared bus — the driver serializes access) |
+| `DRV_TOUCH_CS_PORT` / `_PIN`, `_IRQ_PORT` / `_PIN` | Touch GPIO |
+| `DRV_TOUCH_IRQ_EXTI_LINE` | EXTI line number, for glue routing |
+| `DRV_TOUCH_RAW_X_MIN/MAX`, `_Y_MIN/MAX` | Calibration defaults (overwritten at runtime by `lv_xpt2046_calibrate`) |
+
+`drv_setup.c` and `drv_isr_glue.c` are the **only** library sources that
+reference these macros — everything else in Layers 0/1 consumes plain config
+structs/handles, which is what makes them host-testable (see
+[Testing](#testing)).
+
+If your app needs its own peripherals beyond the display/touch (e.g. this
+repo's example reads an RTC and sends UART debug output), extend
+`drv_constants.h` with an app-level section using your own prefix (the
+example uses `APP_*`) and put the code that touches those raw handles in one
+small glue file (the example's `App/system.c`) — the rest of your app should
+depend on that file's clean API, never on `main.h` symbols directly.
 
 ---
+
+## The `drv_platform` CMake contract
+
+`tft_drivers`'s `CMakeLists.txt` doesn't know your CubeMX include paths, MCU
+defines, or where `drv_constants.h` lives. Before `add_subdirectory()`-ing
+this repo, define an `INTERFACE` target named `drv_platform`:
+
+```cmake
+add_library(drv_platform INTERFACE)
+target_include_directories(drv_platform INTERFACE
+    App/                                              # drv_constants.h
+    Profiles/board_1/Core/Inc
+    Profiles/board_1/Drivers/CMSIS/Include
+    Profiles/board_1/Drivers/CMSIS/Device/ST/STM32F4xx/Include
+    Profiles/board_1/Drivers/STM32F4xx_HAL_Driver/Inc
+    Profiles/board_1/Middlewares/Third_Party/FreeRTOS/Source/include
+    Profiles/board_1/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2
+)
+target_compile_definitions(drv_platform INTERFACE STM32F446xx USE_HAL_DRIVER)
+
+add_subdirectory(path/to/ILI9341-TFT-LVGL tft_drivers)
+```
+
+If `DRV_ADAPTER_LVGL=ON`, make sure a target named `lvgl` already exists
+before the `add_subdirectory()` call — `tft_drivers` links against it, it
+does not create it. See `examples/LVGL_Lesson/01_Display/App/CMakeLists.txt`
+for a complete working example.
+
+### CMake options
+
+| Option | Default | Effect |
+| --- | --- | --- |
+| `DRV_USE_CMSIS_RTOS2` | `ON` | CMSIS-RTOS2 OSAL backend; `OFF` builds the bare-metal backend instead |
+| `DRV_PROVIDE_HAL_CALLBACKS` | `ON` | Compile the default `HAL_SPI_TxCpltCallback`/`HAL_GPIO_EXTI_Callback` glue |
+| `DRV_ADAPTER_LVGL` | `OFF` | Compile `adapters/lvgl/` and link against the app's `lvgl` target |
+| `DRV_DROP_FRAME_IF_BUSY` | `ON` | LVGL adapter drops a frame instead of blocking when a flush is already in flight |
+| `DRV_SPI_TIMEOUT_MS` | `100` | Blocking SPI transfer timeout |
+| `DRV_DMA_BUSY_WAIT_TIMEOUT_MS` | `200` | LVGL flush busy-wait timeout when `DRV_DROP_FRAME_IF_BUSY=OFF` |
+| `DRV_SPI_MAX_BUSES` | `2` | Max concurrent `drv_spi_bus_t` objects |
+| `ILI9341_MAX_LINE_PX` | `320` | Caps `ILI9341_FillScreen`'s stack line buffer |
+
+---
+
+## Bring-up recipe
+
+1. **[CubeMX]** Configure clocks, SPI1 (display, DMA TX required), SPI2
+   (touch), the four/five GPIO pins, FreeRTOS, and optionally RTC/UART — see
+   [CubeMX peripheral setup](#cubemx-peripheral-setup) below. Generate into
+   `Profiles/board_1/`.
+2. **[Code]** Copy `templates/drv_constants_template.h` to
+   `App/drv_constants.h` and fill in every macro for your board.
+3. **[Code]** Set up `App/CMakeLists.txt` with the `drv_platform` contract
+   above, `add_subdirectory(lvgl)` if using LVGL, then
+   `add_subdirectory(<tft_drivers repo>)`.
+4. **[Code]** Write `App/app_main.c` / `.h`:
+
+```c
+#include "drv/drv_setup.h"
+#include "lv_ili9341.h"
+#include "lv_xpt2046.h"
+
+static uint8_t buf1[DRV_DISP_HOR_RES * 10 * 2];
+static uint8_t buf2[DRV_DISP_HOR_RES * 10 * 2];
+
+void App_Init(void)
+{
+    lv_init();
+    DRV_Setup();                                          /* bring up SPI buses + both chips */
+
+    lv_display_t *disp = lv_ili9341_create(DRV_GetDisplay(), buf1, buf2, sizeof(buf1));
+    lv_xpt2046_create(DRV_GetTouch(), disp);
+
+    /* build your first screen here */
+}
+
+void App_CreateTasks(void)
+{
+    /* osTimerNew(...) for the 1ms LVGL tick, osThreadNew(...) for the GUI
+     * task calling lv_timer_handler() — see the example for a full version */
+}
+```
+
+### Wiring `App_Init` / `App_CreateTasks`
+
+In `Profiles/board_1/Core/Src/main.c`, inside `/* USER CODE BEGIN 2 */`
+(after peripheral init, before `osKernelStart()`):
+
+```c
+App_Init();
+```
+
+In `Profiles/board_1/Core/Src/freertos.c`'s `MX_FREERTOS_Init()`, inside
+`/* USER CODE BEGIN RTOS_THREADS */`:
+
+```c
+App_CreateTasks();
+```
+
+Plus one `#include "app_main.h"` in each file's own `USER CODE BEGIN
+Includes` block. `stm32f4xx_it.c` needs **no edits** — interrupt forwarding
+is handled by the glue below.
+
+> **Regenerating from CubeMX:** if your `.ioc` still has CubeMX-managed
+> FreeRTOS tasks/timers from before you adopted this structure, remove them
+> from the FreeRTOS task list in CubeMX so it stops re-emitting conflicting
+> definitions into `freertos.c` outside the `USER CODE` blocks.
+
+---
+
+## Interrupt wiring
+
+The driver owns ISR logic; no driver file defines `HAL_SPI_TxCpltCallback`
+or `HAL_GPIO_EXTI_Callback` unconditionally. Two strategies, chosen by your
+SPI HAL configuration:
+
+- **HAL register-callbacks mode** (preferred): in CubeMX → Project Manager →
+  Advanced Settings, enable "Register Callbacks" for your display's SPI
+  peripheral. `DRV_Setup()` then registers its own
+  `HAL_SPI_TX_COMPLETE_CB_ID` callback at init; `src/drv_isr_glue.c` defines
+  nothing global.
+- **Default HAL callbacks** (`USE_HAL_SPI_REGISTER_CALLBACKS` not set to 1):
+  `src/drv_isr_glue.c` (compiled when `DRV_PROVIDE_HAL_CALLBACKS=ON`, the
+  default) defines `HAL_SPI_TxCpltCallback`/`HAL_GPIO_EXTI_Callback`,
+  filtered to the display SPI handle / touch IRQ pin, falling through
+  silently otherwise. If your app defines either of these itself, set
+  `DRV_PROVIDE_HAL_CALLBACKS=OFF` and forward to
+  `DRV_ISR_DisplaySpiTxCplt()` / `DRV_ISR_TouchPenDown()`
+  (`include/drv/drv_isr.h`) manually — otherwise you'll get a duplicate
+  symbol at link time.
+
+**NVIC contract:** the display SPI (or its DMA stream) and the touch EXTI
+line must both be at NVIC priority ≥
+`configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY` (5 for the default FreeRTOS
+config) — this is what makes it safe for their ISRs to call `drv_sem_give`.
+
+---
+
+## Bare-metal usage (no RTOS)
+
+Set `DRV_USE_CMSIS_RTOS2=OFF`. `drv_delay_ms`/`drv_tick_ms` map to
+`HAL_Delay`/`HAL_GetTick`, mutexes become a PRIMASK-guarded flag, and
+semaphores a simple ISR-settable flag — all pre-kernel-safe by construction,
+since there's no kernel. A minimal main loop:
+
+```c
+int main(void)
+{
+    HAL_Init();
+    SystemClock_Config();
+    MX_GPIO_Init(); MX_DMA_Init(); MX_SPI1_Init(); MX_SPI2_Init();
+
+    ili9341_t *disp; xpt2046_t *touch;
+    DRV_Setup();
+    disp = DRV_GetDisplay();
+    touch = DRV_GetTouch();
+
+    ILI9341_FillScreen(disp, 0xFFFF);
+    for (;;) {
+        uint16_t x, y;
+        if (XPT2046_ReadPoint(touch, &x, &y, DRV_DISP_HOR_RES, DRV_DISP_VER_RES, DRV_DISP_ROTATION)) {
+            ILI9341_DrawPixel(disp, x, y, 0x0000);
+        }
+    }
+}
+```
+
+`ILI9341_FlushAsync`/`XPT2046_PenIRQ_ISR` still work the same way — you just
+forward the HAL callbacks yourself (see [Interrupt wiring](#interrupt-wiring)) instead of relying on
+a GUI task/kernel to consume them.
+
+---
+
+## LVGL adapter
+
+`DRV_ADAPTER_LVGL=ON` compiles `adapters/lvgl/`:
+
+- `lv_ili9341_create(ili9341_t*, buf1, buf2, buf_bytes)` — replaces
+  `LCDController`. Uses `LV_DISPLAY_RENDER_MODE_PARTIAL`; caller owns the
+  (ping-pong) buffers, sized `hor_res * N_rows * 2`. Flush policy
+  (`DRV_DROP_FRAME_IF_BUSY`, `DRV_DMA_BUSY_WAIT_TIMEOUT_MS`) is in
+  `include/drv/drv_policy.h`.
+- `lv_xpt2046_create(xpt2046_t*, lv_display_t*)` — replaces
+  `TouchController`. Polls `XPT2046_ReadPoint` directly from LVGL's
+  `read_cb`; `lv_xpt2046_set_wake_cb()` lets you wake a sleeping GUI task on
+  PENIRQ.
+- `lv_xpt2046_calibrate(touch, disp, log_cb, out_result)` — 4-point on-screen
+  calibration (replaces `touch_calibrate()`); reports through an optional
+  `log_cb` instead of `printf`, applies the result via
+  `XPT2046_SetCalibration`, and returns it so you can persist it.
+
+## TouchGFX
+
+See `adapters/touchgfx/README.md` for a skeleton `HAL::flushFrameBuffer`
+override and `TouchController::sampleTouch` implementation — TouchGFX
+projects are generated by TouchGFX Designer, so there's no compiled adapter
+target, just documentation. `drv_constants.h` and `DRV_Setup()` are
+identical to the LVGL case.
+
+---
+
+## Testing
+
+### Host unit tests (no ARM toolchain needed)
+
+```bash
+cd tests/host && ./run.sh
+```
+
+Builds `src/ili9341.c`/`src/xpt2046.c` against scriptable mocks of
+`drv_spi.h`/`drv_gpio.h`/`drv_os.h` (this only works because Layers 0/1 never
+see the STM32 HAL directly), the real bare-metal OSAL backend against a
+wall-clock `HAL_Delay`/`HAL_GetTick` stand-in, and the `layering_check` rule
+— all via CTest.
+
+### Hardware smoke checklist
+
+`tests/target/hardware_smoke_checklist.md` — boot, render, rotation, touch
+corners, calibration, a 10-minute soak, plus a concurrent shared-bus stress
+test and a `DRV_DROP_FRAME_IF_BUSY=0` DMA soak. This is the final gate before
+trusting a new board bring-up; run it by hand on target.
+
+---
+
+## CubeMX peripheral setup
+
+Steps marked **[CubeMX]** happen inside STM32CubeMX before code generation;
+**[Code]** steps are manual edits after generation. Generate into
+`Profiles/board_1/` (Project Manager → set the project location there).
 
 ### Step 1 — Clock Configuration [CubeMX]
 
@@ -94,407 +371,118 @@ code generation. Steps marked **[Code]** are manual edits after generation.
 
 > If you skip over-drive and run at 180 MHz the chip will silently malfunction.
 
----
-
 ### Step 2 — SPI for the Display (ILI9341) [CubeMX]
 
 The ILI9341 uses full-duplex SPI in Mode 0 (CPOL=0, CPHA=0).
 
-1. Enable **SPI1** (or any SPI peripheral with a DMA-capable TX stream on your MCU).
-2. Set:
-   - Mode: **Full-Duplex Master**
-   - Data Size: **8 Bits**
-   - CPOL: **Low** / CPHA: **1 Edge**
-   - NSS: **Software** (CS is driven manually as a GPIO)
-   - Baud rate: start at **APB2 / 16** (~5.6 MHz) for bring-up; increase to /4 after
-     confirming the display works.
-   - First Bit: **MSB First**
-3. Under **DMA Settings** for SPI1:
-   - Add a DMA request for **SPI1_TX**.
-   - Stream: **DMA2 Stream 3**, Channel: **3** (STM32F4xx mapping).
-   - Direction: Memory → Peripheral.
-   - Memory increment: **enabled**. Peripheral increment: **disabled**.
-   - Data width (both): **Byte**.
-   - Mode: **Normal**.
-   - Priority: **Low** (raise to Medium if you see DMA starvation).
-4. Under **NVIC Settings** for SPI1, enable **SPI1 global interrupt** at priority **5**
-   (must be ≥ `configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY`, which is 5 for FreeRTOS on
-   STM32F4).
-5. Enable **DMA2 global interrupt** at the same priority.
+1. Enable **SPI1** (or any SPI peripheral with a DMA-capable TX stream).
+2. Mode: **Full-Duplex Master**, Data Size **8 Bits**, CPOL **Low** / CPHA **1
+   Edge**, NSS **Software**, First Bit **MSB First**. Baud rate: start at
+   **APB2 / 16** (~5.6 MHz) for bring-up; increase to /4 once confirmed.
+3. Under **DMA Settings**: add a DMA request for **SPI1_TX**
+   (DMA2 Stream 3 / Channel 3 on STM32F4xx), Memory→Peripheral, memory
+   increment enabled, byte width, Normal mode.
+4. Under **NVIC Settings**, enable the SPI1 and DMA2 global interrupts at
+   priority **5** (≥ `configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY`).
+5. **Recommended:** Project Manager → Advanced Settings → enable "Register
+   Callback" for SPI1, so `DRV_Setup()` can self-register its TX-complete
+   callback instead of relying on the weak-symbol glue.
 
-> SPI1 TX DMA is required for non-blocking display updates. Without it the LVGL flush
-> callback blocks for every frame transfer.
-
----
+> SPI1 TX DMA is required for non-blocking display updates; without it,
+> `ILI9341_FlushAsync` degrades to blocking behavior.
 
 ### Step 3 — SPI for the Touch Controller (XPT2046) [CubeMX]
 
-The XPT2046 uses the same SPI mode as ILI9341 but does not need DMA.
+Same SPI mode as the display, no DMA needed.
 
 1. Enable **SPI2** (any spare SPI peripheral).
-2. Set the same parameters as Step 2 except:
-   - Baud rate: **APB1 / 8** (~5.6 MHz). Do not exceed the XPT2046 SPI clock limit of 2 MHz
-     at 3.3 V; use APB1 / 16 (2.8 MHz) if you see noisy readings.
-   - No DMA needed.
-3. Enable **SPI2 global interrupt** at priority **5**.
-
----
+2. Baud rate: **APB1 / 8** (~5.6 MHz), or APB1/16 (2.8 MHz) if readings are
+   noisy — the XPT2046's SPI clock limit is 2 MHz at 3.3 V.
+3. Enable the SPI2 global interrupt at priority **5**.
 
 ### Step 4 — GPIO Pins [CubeMX]
 
-Configure the following pins as **GPIO_Output**, push-pull, no pull, high-speed:
+Configure as **GPIO_Output**, push-pull, no pull, high-speed:
 
-| Signal                    | Connected to          | User Label in CubeMX |
-| ------------------------- | --------------------- | -------------------- |
-| ILI9341 CS                | any free GPIO         | `CS`                 |
-| ILI9341 DC (Data/Command) | any free GPIO         | `DC`                 |
-| ILI9341 RESET             | any free GPIO         | `RESET`              |
-| XPT2046 CS                | any free GPIO         | `T_CS`               |
+| Signal | User Label |
+| --- | --- |
+| ILI9341 CS | `CS` |
+| ILI9341 DC | `DC` |
+| ILI9341 RESET | `RESET` |
+| XPT2046 CS | `T_CS` |
 
-Configure one pin as **GPIO_EXTI** (external interrupt) with falling-edge trigger:
+Configure as **GPIO_EXTI** (falling-edge trigger):
 
-| Signal               | Connected to          | User Label in CubeMX |
-| -------------------- | --------------------- | -------------------- |
-| XPT2046 IRQ (PENIRQ) | any EXTI-capable GPIO | `T_IRQ`              |
+| Signal | User Label |
+| --- | --- |
+| XPT2046 IRQ (PENIRQ) | `T_IRQ` |
 
-Under **NVIC**, enable the EXTI line for T_IRQ at priority **5**.
+Enable the EXTI line for `T_IRQ` in **NVIC** at priority **5**.
 
-> Set T_IRQ pull to **No pull** if the display board has a hardware pull-up (most do).
-> Set to **Pull-up** if unsure.
-
----
+> Set `T_IRQ` pull to **No pull** if the display board has a hardware
+> pull-up (most do); **Pull-up** if unsure.
 
 ### Step 5 — FreeRTOS [CubeMX]
 
-1. Enable **FreeRTOS** under **Middleware** → use **CMSIS-RTOS V2** API.
-2. Set:
-   - **Heap Management**: Heap_4 (supports `malloc`/`free` fragmentation).
-   - **Total Heap Size**: ≥ 32768 bytes (32 KB). See memory notes below.
-   - **USE_MUTEXES**: enabled.
-   - **USE_RECURSIVE_MUTEXES**: enabled.
-   - **USE_COUNTING_SEMAPHORES**: enabled.
-3. Leave task creation in `freertos.c`; do **not** create the LVGL task in CubeMX — add
-   it manually in the `USER CODE` blocks to keep it out of the regeneration zone.
+1. Enable **FreeRTOS** under **Middleware** → **CMSIS-RTOS V2** API.
+2. Heap Management: **Heap_4**, Total Heap Size ≥ 32 KB, `USE_MUTEXES`,
+   `USE_RECURSIVE_MUTEXES`, `USE_COUNTING_SEMAPHORES` all enabled.
+3. Don't create GUI/app tasks in CubeMX's FreeRTOS task list — they live in
+   `App_CreateTasks()` instead, outside the regeneration zone.
 
-#### FreeRTOSConfig.h key values [Code]
-
-After generation, verify or set these in `Core/Inc/FreeRTOSConfig.h`:
+Verify in `Core/Inc/FreeRTOSConfig.h`:
 
 ```c
-#define configENABLE_FPU                    1       // Required for Cortex-M4F
-#define configTOTAL_HEAP_SIZE               (32 * 1024)
-#define configMINIMAL_STACK_SIZE            128     // Words (512 bytes)
-#define configTICK_RATE_HZ                  1000
-#define configMAX_PRIORITIES                56
-#define configUSE_MUTEXES                   1
-#define configUSE_RECURSIVE_MUTEXES         1
-#define configUSE_COUNTING_SEMAPHORES       1
-#define configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY  5
+#define configENABLE_FPU                              1     /* Cortex-M4F */
+#define configTOTAL_HEAP_SIZE                         (32 * 1024)
+#define configTICK_RATE_HZ                             1000
+#define configUSE_MUTEXES                               1
+#define configUSE_RECURSIVE_MUTEXES                     1
+#define configUSE_COUNTING_SEMAPHORES                   1
+#define configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY     5
 ```
-
-> `configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY = 5` means all ISRs that call FreeRTOS
-> API functions (like `xTaskNotifyFromISR`) must be at NVIC priority ≥ 5.
-> The SPI and EXTI interrupts are set to exactly 5, which is the lowest valid priority.
-
----
 
 ### Step 6 — Optional: RTC and UART [CubeMX]
 
-These are only needed if you want the time/date display and UART debug output from the
-example. Skip if you are building a minimal display-only project.
+Only needed for the example's time/date display and UART debug output.
 
-**RTC:**
-
-- Enable **RTC** with internal LSE or LSI clock.
-- Clock source: LSE (32.768 kHz crystal) for accuracy; LSI for bring-up without a crystal.
-
-**UART2 with DMA (for debug output):**
-
-- Enable **USART2**, Asynchronous, 115200 baud.
-- Add **DMA TX request** for USART2.
-
----
+- **RTC**: internal LSE (accurate) or LSI (bring-up without a crystal).
+- **UART2 with DMA**: Asynchronous, 115200 baud, DMA TX request enabled.
 
 ### Step 7 — Generate Code [CubeMX]
 
-1. Set **Toolchain/IDE** to **CMake** (or **Makefile** / **STM32CubeIDE** as preferred).
-2. Click **Generate Code**.
+Set **Toolchain/IDE** to **CMake**, target location `Profiles/board_1/`,
+click **Generate Code**.
 
 ---
 
-### Step 8 — Add LVGL [Code]
+## Rotation reference
 
-1. Clone or copy LVGL v9.2 into `Drivers/lvgl/`.
-2. Copy `Drivers/lvgl/lv_conf_template.h` to `Drivers/lv_conf.h` (one level above `lvgl/`).
-3. Set the required options in `lv_conf.h`:
+| Value | Mode | HOR_RES | VER_RES |
+| --- | --- | --- | --- |
+| 0 | Portrait | 240 | 320 |
+| 1 | Portrait flipped | 240 | 320 |
+| 2 | Landscape flipped | 320 | 240 |
+| 3 | Landscape | 320 | 240 |
 
-```c
-#define LV_USE_LVGL         1                      // Master enable (must be first)
-#define LV_COLOR_DEPTH      16                     // RGB565 — matches ILI9341 pixel format
-#define LV_MEM_SIZE         (16 * 1024U)           // 16 KB LVGL internal heap
-#define LV_USE_OS           LV_OS_CMSIS_RTOS2      // Enable lv_lock()/lv_unlock()
-```
-
-1. In `CMakeLists.txt`, add LVGL sources and the `Drivers/` include path. LVGL provides a
-   `CMakeLists.txt`; include it with `add_subdirectory(Drivers/lvgl)`.
-
----
-
-### Step 9 — Add the Driver Package [Code]
-
-Add this repository to your project (see [Installation](#installation) above), then add
-the following to `CMakeLists.txt`:
-
-```cmake
-target_sources(${PROJECT_NAME} PRIVATE
-    Drivers/ILI9341-TFT-LVGL/Board/board_drivers.c
-    Drivers/ILI9341-TFT-LVGL/Display/ILI9341.c
-    Drivers/ILI9341-TFT-LVGL/Display/LCDController.c
-    Drivers/ILI9341-TFT-LVGL/Display/XPT2046.c
-    Drivers/ILI9341-TFT-LVGL/Display/TouchController.c
-)
-
-target_include_directories(${PROJECT_NAME} PRIVATE
-    Drivers/ILI9341-TFT-LVGL/Board
-    Drivers/ILI9341-TFT-LVGL/Display
-    Drivers                          # for lv_conf.h
-)
-
-target_compile_definitions(${PROJECT_NAME} PRIVATE
-    FREERTOS                         # enables RTOS-aware code paths in the drivers
-    BOARD_STM32F446                  # select your board (see Step 10)
-)
-```
+Set `DRV_DISP_ROTATION` and matching `DRV_DISP_HOR_RES`/`DRV_DISP_VER_RES` in
+`drv_constants.h`. Rotation 3 is the one validated against real hardware in
+this repo's history; 0–2 use an analytically-derived touch mapping (see
+`src/xpt2046.c`) that should be re-checked on your panel via the hardware
+smoke checklist.
 
 ---
 
-### Step 10 — Create a Board Header [Code]
+## Porting to a new board
 
-Duplicate `Board/boards/board_stm32f446.h` and edit it for your MCU. Every `BOARD_*`
-macro maps to a CubeMX-generated symbol from `main.h` and `spi.h`.
+1. `cp Profiles/board_1 Profiles/board_2` — or generate fresh from CubeMX
+   into `Profiles/board_2/`.
+2. Copy and edit `App/drv_constants.h` for the new pin/handle mapping (or
+   keep one `drv_constants.h` per profile if the app differs too).
+3. Build with `-DPROFILE=board_2`.
 
-```c
-/* Display (ILI9341) on SPI1 */
-#define BOARD_DISP_SPI_HANDLE        (&hspi1)
-#define BOARD_DISP_CS_PORT           CS_GPIO_Port
-#define BOARD_DISP_CS_PIN            CS_Pin
-#define BOARD_DISP_DC_PORT           DC_GPIO_Port
-#define BOARD_DISP_DC_PIN            DC_Pin
-#define BOARD_DISP_RESET_PORT        RESET_GPIO_Port
-#define BOARD_DISP_RESET_PIN         RESET_Pin
-#define BOARD_DISP_HOR_RES           320u   // logical width after rotation
-#define BOARD_DISP_VER_RES           240u   // logical height after rotation
-#define BOARD_DISP_ROTATION          3u     // 0=portrait, 3=landscape
-
-/* Touch (XPT2046) on SPI2 */
-#define BOARD_TOUCH_SPI_HANDLE       (&hspi2)
-#define BOARD_TOUCH_CS_PORT          T_CS_GPIO_Port
-#define BOARD_TOUCH_CS_PIN           T_CS_Pin
-#define BOARD_TOUCH_IRQ_PORT         T_IRQ_GPIO_Port
-#define BOARD_TOUCH_IRQ_PIN          T_IRQ_Pin
-
-/* Touch calibration defaults (raw ADC values at each screen edge) */
-#define BOARD_TOUCH_RAW_X_MIN        262u
-#define BOARD_TOUCH_RAW_X_MAX        1872u
-#define BOARD_TOUCH_RAW_Y_MIN        230u
-#define BOARD_TOUCH_RAW_Y_MAX        1872u
-```
-
-> Get calibration values by running `touch_calibrate()` once with `printf` enabled and
-> noting the raw values printed for each corner. Then update these defaults.
-
-Then register your new board in `Board/board_config.h`:
-
-```c
-#elif defined(BOARD_YOUR_MCU)
-#include "boards/board_your_mcu.h"
-```
-
-And add the selector to your `CMakeLists.txt`:
-
-```cmake
-set(BOARD_TARGET "your_mcu" CACHE STRING "Board mapping target")
-
-if(BOARD_TARGET STREQUAL "your_mcu")
-    set(BOARD_TARGET_DEFINE BOARD_YOUR_MCU)
-endif()
-
-target_compile_definitions(${PROJECT_NAME} PRIVATE ${BOARD_TARGET_DEFINE})
-```
-
----
-
-### Step 11 — Wire Initialization in main.c [Code]
-
-Add inside `/* USER CODE BEGIN 2 */` (after all peripheral init, before `osKernelStart`):
-
-```c
-#include "lvgl.h"
-#include "LCDController.h"
-#include "TouchController.h"
-#include "board_drivers.h"
-
-lv_init();
-lv_port_disp_init(Board_GetDisplayConfig());
-TouchController_Init(Board_GetTouchConfig());
-load_gui();   // your application UI
-```
-
----
-
-### Step 12 — FreeRTOS Tasks and LVGL Tick [Code]
-
-Add the following inside `MX_FREERTOS_Init()` in `freertos.c`.
-
-#### LVGL 1 ms tick timer
-
-```c
-osTimerId_t lvglTimerHandle;
-const osTimerAttr_t lvglTimer_attributes = { .name = "lvglTimer" };
-
-// inside MX_FREERTOS_Init():
-lvglTimerHandle = osTimerNew(lvglTimerCallback, osTimerPeriodic, NULL, &lvglTimer_attributes);
-osTimerStart(lvglTimerHandle, 1);
-```
-
-```c
-void lvglTimerCallback(void *argument) {
-    lv_tick_inc(1);
-}
-```
-
-#### LVGL task (owns all LVGL API calls)
-
-```c
-osThreadId_t lvglTaskHandle;
-const osThreadAttr_t lvglTask_attributes = {
-    .name       = "lvglTask",
-    .stack_size = 2048 * 4,           // 8 KB — increase if you see stack overflow
-    .priority   = osPriorityLow,
-};
-
-void startLvglTask(void *argument) {
-    for (;;) {
-        osDelay(5);
-        TouchController_Poll();
-        lv_timer_handler();
-    }
-}
-```
-
-#### Calling LVGL from any other task
-
-LVGL is not thread-safe. Any task that touches LVGL objects must hold the lock:
-
-```c
-lv_lock();
-lv_label_set_text(my_label, "updated");
-lv_unlock();
-```
-
-> `lv_lock()` / `lv_unlock()` are available when `LV_USE_OS != LV_OS_NONE`. With
-> `LV_OS_CMSIS_RTOS2` they map to a CMSIS-RTOS2 mutex internally.
-
----
-
-### Step 13 — Build and Verify [Code]
-
-```bash
-cmake -S . -B build -D CMAKE_BUILD_TYPE=Debug -D BOARD_TARGET=stm32f446
-cmake --build build
-```
-
-Flash with your programmer and run the hardware smoke checklist:
-
-1. Device boots without HardFault.
-2. Display powers on; LVGL content renders with correct orientation.
-3. Touch press is detected; drag tracks; corners map correctly.
-4. Leave running 10+ minutes — no freeze or DMA deadlock.
-
----
-
-## Board Selection
-
-The `BOARD_TARGET` CMake variable selects which board header is compiled in:
-
-```bash
-cmake -S . -B build/Release -D CMAKE_BUILD_TYPE=Release -D BOARD_TARGET=stm32f411
-```
-
-Supported values:
-
-| `BOARD_TARGET` | Compile define       | Board header                      |
-| -------------- | -------------------- | --------------------------------- |
-| `stm32f446`    | `BOARD_STM32F446`    | `Board/boards/board_stm32f446.h`  |
-| `stm32f411`    | `BOARD_STM32F411`    | `Board/boards/board_stm32f411.h`  |
-
----
-
-## Porting to a New Board
-
-1. Copy `Board/boards/board_stm32f446.h` → `Board/boards/board_your_mcu.h`.
-2. Update all `BOARD_*` macros to match your MCU's pin and SPI assignments.
-3. Add a `#elif defined(BOARD_YOUR_MCU)` block in `Board/board_config.h`.
-4. Add the new `BOARD_TARGET` value to your `CMakeLists.txt` mapping.
-5. Build with `-D BOARD_TARGET=your_mcu`.
-
-`board_config.h` will catch missing or invalid macros at compile time.
-
----
-
-## Rotation Reference
-
-| Value | Mode               | HOR_RES | VER_RES |
-| ----- | ------------------ | ------- | ------- |
-| 0     | Portrait (default) | 240     | 320     |
-| 1     | Portrait flipped   | 240     | 320     |
-| 2     | Landscape flipped  | 320     | 240     |
-| 3     | Landscape          | 320     | 240     |
-
-Set `BOARD_DISP_ROTATION` and update `BOARD_DISP_HOR_RES` / `BOARD_DISP_VER_RES` to
-match. The display buffers in `LCDController.c` are sized from `BOARD_DISP_HOR_RES`.
-
----
-
-## Memory Budget (STM32F446RE — 128 KB RAM)
-
-| Component                               | Size       |
-| --------------------------------------- | ---------- |
-| FreeRTOS heap (`configTOTAL_HEAP_SIZE`) | 32 KB      |
-| LVGL heap (`LV_MEM_SIZE`)               | 16 KB      |
-| Display render buffers (2 × 10 rows)    | 12.8 KB    |
-| LVGL task stack                         | 8 KB       |
-| Main stack (MSP)                        | 4 KB       |
-| All other task stacks                   | ~3 KB      |
-| **Total**                               | **~76 KB** |
-
-Reduce `LV_MEM_SIZE` or the buffer row count in `LCDController.c` for MCUs with less RAM.
-
----
-
-## Deterministic Timing Policy
-
-For real-time applications (e.g. motor control + UI on the same MCU), the display driver
-can be configured to never block:
-
-```bash
-cmake ... -D DISPLAY_DETERMINISTIC_MODE=ON -D DISPLAY_DROP_FRAME_IF_DMA_BUSY=ON
-```
-
-When `DISPLAY_DROP_FRAME_IF_DMA_BUSY` is ON and a DMA transfer is still running when LVGL
-tries to flush the next frame, the frame is dropped immediately. Worst-case flush latency
-is bounded to the time for a single SPI transaction check.
-
-All policy knobs are in `Display/display_runtime_config.h` and can be overridden
-from CMake with `target_compile_definitions`:
-
-| CMake option                      | Default | Effect                                      |
-| --------------------------------- | ------- | ------------------------------------------- |
-| `DISPLAY_DETERMINISTIC_MODE`      | ON      | Master switch for deterministic policy      |
-| `DISPLAY_DROP_FRAME_IF_DMA_BUSY`  | ON      | Drop frame instead of waiting on DMA        |
-| `DISPLAY_SPI_TIMEOUT_MS`          | 100     | Blocking SPI transaction timeout (ms)       |
-| `DISPLAY_DMA_BUSY_WAIT_TIMEOUT_MS`| 20      | Max wait when drop-frame is disabled (ms)   |
-| `DISPLAY_DMA_BUSY_WAIT_SLICE_MS`  | 1       | Polling granularity while waiting (ms)      |
+No changes to `tft_drivers` itself are needed — board variation lives
+entirely in `drv_constants.h` content.
 
 ---
 
