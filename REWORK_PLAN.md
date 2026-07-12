@@ -795,6 +795,43 @@ Wire all of it to CTest (`add_test` per binary). Add
 
 ## 11. Phase 8 — Restructure the example project
 
+> **Status: DONE.** `examples/LVGL_Lesson/01_Display/` now matches the
+> `App/` + `Profiles/board_1/` shape. `Profiles/board_1/` holds 100% CubeMX
+> output (`Core/`, `Drivers/{CMSIS,STM32F4xx_HAL_Driver}/`, `Middlewares/`,
+> `cmake/stm32cubemx/`, the toolchain files, startup/linker script,
+> `board_1.ioc`). LVGL (source + `lv_conf.h`) moved to `App/lvgl/` — it's a
+> vendored library the user chose to place under `Drivers/`, not CubeMX
+> output, so it belongs with the app per §9.1's `drv_platform`/`lvgl` target
+> contract. `App/drv_constants.h` is the single bridge file (extended, at the
+> user's explicit request mid-Phase-8, with an `APP_*` section for this
+> example's own RTC/UART/LED demo peripherals — not just the `DRV_*`
+> tft_drivers contract); `App/system.h/.c` is the only other file allowed to
+> touch those handles, exposing `System_*` wrappers so `app_main.c`/`gui/`
+> depend only on abstractions. `App/CMakeLists.txt` defines `drv_platform`,
+> pulls in `lvgl` and `tft_drivers` (`DRV_ADAPTER_LVGL=ON`), and builds `app`.
+> Top-level `CMakeLists.txt` picks `Profiles/${PROFILE}` (default `board_1`).
+> `Core/Src/main.c`/`freertos.c` USER CODE blocks shrunk to one include + one
+> `App_Init()`/`App_CreateTasks()` call each; `stm32f4xx_it.c` untouched.
+> Deleted the legacy `Display/`, `Board/` dirs, `lvgl-release-v9.2.zip`, and
+> `plan-progress.md` (all confirmed unreferenced first; the two directory
+> deletions were confirmed with the user before running, since they predated
+> this session). **Verified with a real build**: `cmake --preset Debug &&
+> cmake --build build/Debug` succeeds end-to-end against the installed
+> arm-none-eabi toolchain (751 objects, links `01_Display.elf`, no warnings
+> from `tft_drivers` sources), and `cmake --build build/Debug --target
+> layering_check` passes. Bare-metal-only compile check of the library
+> (`DRV_USE_CMSIS_RTOS2=OFF`) was already covered in Phase 1/7 (mocks link
+> `drv_os_baremetal.c` directly); not re-run against this example since the
+> example app itself is FreeRTOS-only per plan.
+>
+> Not done: the `.ioc`'s own FreeRTOS task list (`normalTask`, `lvglTask`,
+> `belowNormalTask`, `sharedQueue`, `lvglTimer`) still declares tasks that
+> `App_CreateTasks()` now owns — a real CubeMX regeneration would need those
+> removed from the `.ioc` first, or it will re-emit conflicting definitions
+> into `freertos.c` outside the USER CODE blocks. Flagged for Phase 9 docs
+> and for whoever next opens this `.ioc` in CubeMX. `tests/target/selftest.c`
+> also remains unwritten (needs real target buffers to be worth writing).
+
 Target: `examples/LVGL_Lesson/01_Display/` becomes the reference for the
 `App/` + `Profiles/board_1/` shape (§3.2).
 

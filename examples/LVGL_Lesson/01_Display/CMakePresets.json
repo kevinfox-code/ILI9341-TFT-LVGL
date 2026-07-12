@@ -6,8 +6,9 @@
             "hidden": true,
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/build/${presetName}",
-		    "toolchainFile": "${sourceDir}/cmake/gcc-arm-none-eabi.cmake",
+		    "toolchainFile": "${sourceDir}/Profiles/board_1/cmake/gcc-arm-none-eabi.cmake",
             "cacheVariables": {
+                "PROFILE": "board_1"
             }
         },
         {
