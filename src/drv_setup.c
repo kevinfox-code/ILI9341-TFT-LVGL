@@ -6,6 +6,17 @@
 static ili9341_t *s_display = NULL;
 static xpt2046_t *s_touch = NULL;
 
+/* Internal ili9341.c accessor, not part of the public API. */
+extern drv_spi_bus_t *ili9341_get_bus(ili9341_t *d);
+
+#if defined(USE_HAL_SPI_REGISTER_CALLBACKS) && (USE_HAL_SPI_REGISTER_CALLBACKS == 1)
+static void drv_hal_spi_tx_cplt_cb(SPI_HandleTypeDef *hspi)
+{
+    (void)hspi;
+    DRV_ISR_DisplaySpiTxCplt();
+}
+#endif
+
 drv_status_t DRV_Setup(void)
 {
     drv_spi_bus_t *disp_bus = drv_spi_bus_create((void *)DRV_DISP_SPI_HANDLE);
@@ -47,6 +58,14 @@ drv_status_t DRV_Setup(void)
         return st;
     }
 
+#if defined(USE_HAL_SPI_REGISTER_CALLBACKS) && (USE_HAL_SPI_REGISTER_CALLBACKS == 1)
+    if (HAL_SPI_RegisterCallback((SPI_HandleTypeDef *)DRV_DISP_SPI_HANDLE,
+                                  HAL_SPI_TX_COMPLETE_CB_ID,
+                                  drv_hal_spi_tx_cplt_cb) != HAL_OK) {
+        return DRV_ERR_HW;
+    }
+#endif
+
     return DRV_OK;
 }
 
@@ -65,10 +84,6 @@ void DRV_ISR_DisplaySpiTxCplt(void)
     if (s_display == NULL) {
         return;
     }
-    /* The display's SPI bus is the first argument passed at init time;
-     * ili9341.c registers itself as the tx-done hook context, so forwarding
-     * through the bus object is sufficient here. */
-    extern drv_spi_bus_t *ili9341_get_bus(ili9341_t *d);
     drv_spi_tx_complete_isr(ili9341_get_bus(s_display));
 }
 

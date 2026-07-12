@@ -493,6 +493,17 @@ Required behavior:
 
 ## 6. Phase 3 — Interrupt wiring
 
+> **Status: DONE.** `drv_setup.c` implements `DRV_ISR_DisplaySpiTxCplt`/
+> `DRV_ISR_TouchPenDown` and, when `USE_HAL_SPI_REGISTER_CALLBACKS==1`, registers
+> its own `HAL_SPI_TX_COMPLETE_CB_ID` callback in `DRV_Setup()`. `src/drv_isr_glue.c`
+> provides the fallback global `HAL_SPI_TxCpltCallback`/`HAL_GPIO_EXTI_Callback`
+> definitions, compiled out entirely when register-callbacks mode is active (the
+> CMake `DRV_PROVIDE_HAL_CALLBACKS` gate is added in Phase 6; the `nm` symbol-absence
+> check will be run once that target exists).
+> `grep -rln 'DRV_DISP_\|DRV_TOUCH_' src/` → `drv_isr_glue.c`, `drv_setup.c`, plus
+> `xpt2046.c` (only for the header-defined default `DRV_TOUCH_BUS_TIMEOUT_MS` policy
+> constant named per §5.2, not a board-macro leak).
+
 ### 6.1 `include/drv/drv_isr.h`
 
 Single header declaring every ISR entry point an application must route:
