@@ -53,6 +53,10 @@ static void vsync_timer_cb(void *arg)
 {
     (void)arg;
     touchgfxSignalVSync();
+    /* Pet the watchdog here: this timer already paces the display at ~60Hz,
+     * so its continued firing is a reasonable proxy for "the screen is
+     * still alive". */
+    System_PetWatchdog();
 }
 
 static void touchgfx_task(void *arg)

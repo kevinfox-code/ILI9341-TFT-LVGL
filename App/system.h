@@ -20,6 +20,10 @@ void System_GetClockStrings(char *time_buf, size_t time_buf_len, char *date_buf,
 
 void System_ToggleDebugLed(void);
 
+/* Refreshes the independent watchdog. Must be called often enough to beat
+ * its reload timeout (see IWDG_Init in iwdg.c) or the MCU resets. */
+void System_PetWatchdog(void);
+
 /* Wraps the CubeMX-generated Error_Handler() so callers never need main.h. */
 void System_Fatal(void);
 

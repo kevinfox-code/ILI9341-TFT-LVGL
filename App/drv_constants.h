@@ -18,6 +18,7 @@
 #include "spi.h"
 #include "rtc.h"
 #include "usart.h"
+#include "iwdg.h"
 
 /* ---- HAL family --------------------------------------------------------- */
 #define DRV_HAL_HEADER               "stm32f4xx_hal.h"
@@ -63,5 +64,6 @@
 #define APP_UART_HANDLE               (&huart2)
 #define APP_DEBUG_LED_PORT            GREEN_LED_GPIO_Port
 #define APP_DEBUG_LED_PIN             GREEN_LED_Pin
+#define APP_IWDG_HANDLE               (&hiwdg)
 
 #endif /* DRV_CONSTANTS_H_ */
