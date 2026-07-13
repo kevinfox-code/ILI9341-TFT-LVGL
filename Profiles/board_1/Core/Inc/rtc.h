@@ -36,6 +36,11 @@ extern RTC_HandleTypeDef hrtc;
 
 /* USER CODE BEGIN Private defines */
 
+/* Sentinel written to RTC_BKP_DR0 once the seed date/time has been applied.
+ * Backup registers survive warm resets/reflashes (VBAT-backed), so this
+ * lets MX_RTC_Init() skip re-seeding the clock on every boot. */
+#define RTC_INIT_MAGIC 0x32F2U
+
 /* USER CODE END Private defines */
 
 void MX_RTC_Init(void);

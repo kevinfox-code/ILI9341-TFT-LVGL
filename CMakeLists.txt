@@ -36,6 +36,22 @@ add_executable(${CMAKE_PROJECT_NAME})
 # STM32CubeMX generated sources for the selected profile.
 add_subdirectory(Profiles/${PROFILE}/cmake/stm32cubemx stm32cubemx)
 
+# TouchGFX Designer generated glue, if present. Its CMakeLists.txt is
+# regenerated on every "Generate Code" and (unlike stm32cubemx's, which uses
+# CMAKE_CURRENT_SOURCE_DIR-relative paths) hardcodes paths against
+# CMAKE_SOURCE_DIR, assuming Profiles/${PROFILE}/ is the project root. Since
+# our real CMAKE_SOURCE_DIR is the repo root, point it at the profile for the
+# duration of the include. Using include() rather than add_subdirectory()
+# avoids CMake re-deriving CMAKE_SOURCE_DIR from internal state when a new
+# directory scope is entered, which silently discards the override.
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/Profiles/${PROFILE}/cmake/touchgfx/CMakeLists.txt)
+    set(_REPO_SOURCE_DIR ${CMAKE_SOURCE_DIR})
+    set(CMAKE_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/Profiles/${PROFILE})
+    include(Profiles/${PROFILE}/cmake/touchgfx/CMakeLists.txt)
+    set(CMAKE_SOURCE_DIR ${_REPO_SOURCE_DIR})
+    unset(_REPO_SOURCE_DIR)
+endif()
+
 # App/ — tft_drivers, LVGL, and the application itself.
 add_subdirectory(App)
 
@@ -44,6 +60,13 @@ add_subdirectory(App)
 # a stub on this FreeRTOS/CMSIS-RTOS2 port).
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Profiles/${PROFILE}/Core/Src/cmsis_os2_ext.c
+)
+
+# Hand-written TouchGFX board glue (partial-framebuffer transmit hooks →
+# tft_drivers ILI9341). Registered here, not in cmake/stm32cubemx or
+# cmake/touchgfx, which CubeMX/TouchGFX Designer regenerate.
+target_sources(${CMAKE_PROJECT_NAME} PRIVATE
+    Profiles/${PROFILE}/TouchGFX/target/TouchGFXDisplayDriver.cpp
 )
 
 # Remove wrong libob.a library dependency when using cpp files

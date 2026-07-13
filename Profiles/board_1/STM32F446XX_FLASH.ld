@@ -102,6 +102,17 @@ SECTIONS
     . = ALIGN(4);
   } >FLASH
 
+  /* TouchGFX-generated assets (images/fonts/texts). The generator attributes
+   * them to these named sections; with no external flash on this board they
+   * all live in internal FLASH. Placed explicitly so they never become
+   * orphan sections. */
+  IntFlashSection : { . = ALIGN(4); *(IntFlashSection IntFlashSection.*) . = ALIGN(4); } >FLASH
+  ExtFlashSection : { . = ALIGN(4); *(ExtFlashSection ExtFlashSection.*) . = ALIGN(4); } >FLASH
+  FontFlashSection : { . = ALIGN(4); *(FontFlashSection FontFlashSection.*) . = ALIGN(4); } >FLASH
+  FontSearchFlashSection : { . = ALIGN(4); *(FontSearchFlashSection FontSearchFlashSection.*) . = ALIGN(4); } >FLASH
+  TextFlashSection : { . = ALIGN(4); *(TextFlashSection TextFlashSection.*) . = ALIGN(4); } >FLASH
+  TextSearchFlashSection : { . = ALIGN(4); *(TextSearchFlashSection TextSearchFlashSection.*) . = ALIGN(4); } >FLASH
+
   .ARM.extab (READONLY) : /* The "READONLY" keyword is only supported in GCC11 and later, remove it if using GCC10 or earlier. */
   {
     . = ALIGN(4);

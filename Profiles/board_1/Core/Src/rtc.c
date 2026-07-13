@@ -57,6 +57,12 @@ void MX_RTC_Init(void)
 
   /* USER CODE BEGIN Check_RTC_BKUP */
 
+  /* RTC_BKP_DR0 survives warm resets and reflashes as long as VBAT/backup
+   * domain power is maintained; it does NOT survive a backup-domain reset
+   * (VBAT loss). Only stamp the seed date/time on true first-boot so the
+   * clock isn't wiped back to this fixed value on every reset. */
+  if (HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR0) == RTC_INIT_MAGIC)
+  {
   /* USER CODE END Check_RTC_BKUP */
 
   /** Initialize RTC and set the Time and Date
@@ -80,7 +86,8 @@ void MX_RTC_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN RTC_Init 2 */
-
+  HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR0, RTC_INIT_MAGIC);
+  }
   /* USER CODE END RTC_Init 2 */
 
 }
@@ -131,3 +138,4 @@ void HAL_RTC_MspDeInit(RTC_HandleTypeDef* rtcHandle)
 /* USER CODE BEGIN 1 */
 
 /* USER CODE END 1 */
+

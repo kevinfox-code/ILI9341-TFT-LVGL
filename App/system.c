@@ -37,6 +37,11 @@ void System_Fatal(void)
     Error_Handler();
 }
 
+void System_PetWatchdog(void)
+{
+    HAL_IWDG_Refresh(APP_IWDG_HANDLE);
+}
+
 bool System_UartSendLine(const char *data, uint16_t len)
 {
     static uint8_t s_tx_buf[64];

@@ -28,17 +28,13 @@ target_compile_definitions(drv_platform INTERFACE
 )
 
 # ---------------------------------------------------------------------------
-# LVGL
-# ---------------------------------------------------------------------------
-set(LV_CONF_PATH "${CMAKE_CURRENT_LIST_DIR}/lv_conf.h")
-add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/lvgl lvgl)
-target_link_libraries(lvgl PUBLIC drv_platform)
-
-# ---------------------------------------------------------------------------
 # tft_drivers (vendored under App/drivers/)
 # ---------------------------------------------------------------------------
+# This branch's UI is TouchGFX (generated under Profiles/${PROFILE}/TouchGFX,
+# built by Profiles/${PROFILE}/cmake/touchgfx); LVGL and its adapter are not
+# compiled here — see the lvgl branch/history for that wiring.
 set(DRV_USE_CMSIS_RTOS2 ON CACHE BOOL "" FORCE)
-set(DRV_ADAPTER_LVGL ON CACHE BOOL "" FORCE)
+set(DRV_ADAPTER_LVGL OFF CACHE BOOL "" FORCE)
 add_subdirectory(${TFT_DRIVERS_ROOT} tft_drivers)
 
 # ---------------------------------------------------------------------------
@@ -47,7 +43,6 @@ add_subdirectory(${TFT_DRIVERS_ROOT} tft_drivers)
 add_library(app STATIC
     app_main.c
     system.c
-    gui/gui.c
 )
 target_include_directories(app PUBLIC ${CMAKE_CURRENT_LIST_DIR})
-target_link_libraries(app PUBLIC tft_drivers lvgl drv_platform)
+target_link_libraries(app PUBLIC tft_drivers drv_platform)
