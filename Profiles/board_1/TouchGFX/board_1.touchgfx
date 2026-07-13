@@ -2,7 +2,7 @@
   "Application": {
     "Screens": [
       {
-        "Name": "screen",
+        "Name": "background",
         "OverrideDefaultBufferSize": true,
         "CanvasBufferSize": 4800,
         "Components": [
@@ -11,11 +11,41 @@
             "Name": "scalableImage1",
             "Width": 320,
             "Height": 240,
-            "Filename": "futuristic_dashboard.png",
+            "Filename": "futuristic_dashboard_template.png",
             "ScalingAlgorithm": "Nearest-neighbor"
+          },
+          {
+            "Type": "DigitalClock",
+            "Name": "digitalClock1",
+            "X": 50,
+            "Y": 58,
+            "Width": 220,
+            "Height": 55,
+            "TextColor": {
+              "Red": 45,
+              "Green": 214,
+              "Blue": 209
+            },
+            "TextId": "__SingleUse_J1J3",
+            "DisplaySeconds": true,
+            "DisplayLeadingZeroForHourIndicator": true,
+            "InitialHour": 10,
+            "InitialMinute": 10
           }
         ],
-        "Interactions": []
+        "Interactions": [
+          {
+            "InteractionName": "time_interaction",
+            "Trigger": {
+              "Type": "TriggerOnEveryTick",
+              "TickCount": 1
+            },
+            "Action": {
+              "Type": "ActionCustom",
+              "FunctionName": "update_time"
+            }
+          }
+        ]
       }
     ],
     "CustomContainerDefinitions": [],
@@ -25,7 +55,7 @@
       "Height": 240
     },
     "SelectedColorDepth": 16,
-    "StartupScreenName": "screen",
+    "StartupScreenName": "background",
     "SelectedStartupLanguage": "GB",
     "TouchGfxPath": "../Middlewares/ST/touchgfx",
     "UIPath": ".",

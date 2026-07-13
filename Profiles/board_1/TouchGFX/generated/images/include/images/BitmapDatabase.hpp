@@ -7,6 +7,7 @@
 #include <touchgfx/Bitmap.hpp>
 
 const uint16_t BITMAP_FUTURISTIC_DASHBOARD_ID = 0;
+const uint16_t BITMAP_FUTURISTIC_DASHBOARD_TEMPLATE_ID = 1;
 
 namespace BitmapDatabase
 {
