@@ -3,7 +3,8 @@
     "allow": [
       "Bash(grep -v '\\\\.o$')",
       "Bash(grep -v '\\\\.elf$')",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(cmake --build --preset Release)"
     ]
   }
 }
