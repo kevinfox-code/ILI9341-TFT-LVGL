@@ -19,11 +19,13 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "cmsis_os.h"
+#include "crc.h"
 #include "dma.h"
 #include "rtc.h"
 #include "spi.h"
 #include "usart.h"
 #include "gpio.h"
+#include "app_touchgfx.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -104,11 +106,16 @@ int main(void)
   MX_RTC_Init();
   MX_SPI2_Init();
   MX_USART2_UART_Init();
+  MX_CRC_Init();
+  MX_TouchGFX_Init();
+  /* Call PreOsInit function */
+  MX_TouchGFX_PreOSInit();
   /* USER CODE BEGIN 2 */
-  /* App_Init() runs at the top of the LVGL task (App/app_main.c), not here:
-   * it creates FreeRTOS objects and uses HAL_Delay, and the first FreeRTOS
-   * API call masks interrupts (BASEPRI) until osKernelStart(), which freezes
-   * the HAL tick and deadlocks any pre-kernel HAL_Delay. */
+  /* DRV_Setup() runs at the top of the TouchGFX task (App/app_main.c), not
+   * here: it uses HAL_Delay, and the first FreeRTOS API call (already made
+   * above by MX_TouchGFX_Init) masks interrupts (BASEPRI) until
+   * osKernelStart(), which freezes the HAL tick and deadlocks any pre-kernel
+   * HAL_Delay. */
   /* USER CODE END 2 */
 
   /* Init scheduler */
