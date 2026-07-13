@@ -1,3 +1,95 @@
+# Release Notes — v2.0.0
+
+**tft_drivers — ILI9341 TFT + XPT2046 Touch, CubeMX-Decoupled, RTOS-Safe**
+
+---
+
+## Overview
+
+v2.0.0 is a ground-up rework: the driver is no longer a `Board/`+`Display/`
+pair of CubeMX-coupled files, but a layered, CubeMX-free static library
+(`tft_drivers`) with a single connector header (`drv_constants.h`), an
+optional LVGL adapter, TouchGFX integration notes, host-runnable unit tests,
+and a restructured `App/` + `Profiles/board_1/` example project. See
+`App/drivers/REWORK_PLAN.md` for the full phase-by-phase design and
+rationale — this section only covers what changed for existing users.
+
+## Breaking changes
+
+Everything below is a rename or a structural move; behavior (init byte
+sequence, MADCTL values, touch sampling order) is unchanged except where
+noted as a fix in `App/drivers/REWORK_PLAN.md` Appendix A.
+
+| Old (v1.x) | New (v2.0.0) |
+| --- | --- |
+| `Display/ILI9341.c`, `Board/board_drivers.c`, ... | `App/drivers/src/*.c` + `App/drivers/include/drv/*.h` (the `tft_drivers` CMake target) |
+| `Board/board_config.h` | `App/drivers/include/drv/drv_config.h` |
+| `Board/boards/board_*.h` | `App/drv_constants.h` (copied from `App/drivers/templates/drv_constants_template.h`) |
+| `BOARD_*` macros | `DRV_*` macros (same meaning, new prefix; `DRV_HAL_HEADER`, `DRV_DISP_SPI_MX_INIT()`, `DRV_TOUCH_SPI_MX_INIT()`, `DRV_TOUCH_IRQ_EXTI_LINE` are new/required) |
+| `#define FREERTOS` | `DRV_USE_CMSIS_RTOS2` CMake option (default `ON`); no more `#ifdef FREERTOS` in driver code |
+| `ILI9341_Init(config)` (no instance) | `ILI9341_Init(&ili9341_t*, cfg)` — opaque instance pointer |
+| `ILI9341_DrawBitmapDMA(w, h, s, lv_display_t*)` | `ILI9341_FlushAsync(d, x0,y0,x1,y1, px, len, done_cb, user)` — no LVGL type in the driver, handles chunking for full-frame transfers |
+| `ILI9341_CancelFlushCallback()` | Not needed — the LVGL adapter's pending-pointer pattern (`App/drivers/adapters/lvgl/lv_ili9341.c`) closes the double-`flush_ready` race directly |
+| global `HAL_SPI_TxCpltCallback` / `HAL_GPIO_EXTI_Callback` in driver `.c` files | `App/drivers/src/drv_isr_glue.c` (toggle with `DRV_PROVIDE_HAL_CALLBACKS`) or HAL register-callbacks mode; see `App/drivers/README.md` "Interrupt wiring" |
+| `lv_port_disp_init(cfg)` | `lv_ili9341_create(ili9341_t*, buf1, buf2, buf_bytes)` |
+| `TouchController_Init(cfg)` / `TouchController_Poll()` | `lv_xpt2046_create(xpt2046_t*, lv_display_t*)` — polls from LVGL's own `read_cb`, no separate poll call |
+| `touch_calibrate()` (printf-based) | `lv_xpt2046_calibrate(touch, disp, log_cb, out_result)` (optional log callback, returns the result) |
+| `Board_Get*()` / `Board_Set*()` | Deleted — config is a plain struct passed at `*_Init()`, calibration via `XPT2046_SetCalibration`/`GetCalibration` |
+| `display_runtime_config.h` `DISPLAY_*` knobs | `App/drivers/include/drv/drv_policy.h` `DRV_DROP_FRAME_IF_BUSY` / `DRV_DMA_BUSY_WAIT_TIMEOUT_MS` |
+| `examples/LVGL_Lesson/01_Display/{Core,Drivers,Middlewares,...}` at the example root | `Profiles/board_1/{Core,Drivers,Middlewares,...}`; app code moved to `App/` (`app_main.c`, `gui/`) |
+| `BOARD_TARGET` CMake cache var | `PROFILE` CMake cache var, selecting `Profiles/${PROFILE}` |
+
+Fixed as part of this rework (see `App/drivers/REWORK_PLAN.md` Appendix A
+for the full bug list with line-level references to the old code): the
+CS-before-BSY-clear truncation, the `uint16_t` DMA length overflow on
+full-frame flushes, the missing `ILI9341_DrawPixel` implementation, the
+un-locked shared SPI bus between display and touch, the single-rotation-only
+touch axis mapping, and pre-kernel `osDelay`/mutex hangs.
+
+## Known limitations carried forward
+
+- Touch calibration is still not persisted across power cycles by the
+  library itself — `XPT2046_SetCalibration`/`GetCalibration` give you the
+  values; persisting them (flash, EEPROM, ...) is up to the app.
+- Rotation 3 (landscape) is the only touch mapping validated against real
+  hardware in this repo's history; rotations 0–2 are analytically derived
+  (see `App/drivers/README.md` "Rotation reference") and should be
+  reconfirmed on your panel.
+- `XPT2046_ReadRaw`/`PenDown` still require a wired PENIRQ GPIO; IRQ-less
+  polling is not supported.
+
+---
+
+# Release Notes — v2.1.0
+
+**Repository restructure: sample project promoted to repo root**
+
+---
+
+## Overview
+
+v2.1.0 makes no code changes — it inverts the repository's top-level shape.
+Previously the `tft_drivers` library lived at the repo root and the
+reference application lived under `examples/LVGL_Lesson/01_Display/`. That
+was backwards for a repo whose entire point is demonstrating the reference
+application: the library is now vendored at `App/drivers/` (exactly the
+shape `App/drivers/README.md` — and `App/drivers/REWORK_PLAN.md` §3.2 before
+it — already documented for consumers of this library), and `App/` +
+`Profiles/board_1/` sit at the repo root.
+
+| Old (v2.0.0) | New (v2.1.0) |
+| --- | --- |
+| `CMakeLists.txt`, `include/`, `src/`, `adapters/`, `templates/`, `cmake/`, `tests/`, `datasheets/` at repo root | same, under `App/drivers/` |
+| `README.md` (library docs) at repo root | `App/drivers/README.md`; repo-root `README.md` now documents the reference project |
+| `REWORK_PLAN.md` at repo root | `App/drivers/REWORK_PLAN.md` |
+| `examples/LVGL_Lesson/01_Display/{App,Profiles,CMakeLists.txt,CMakePresets.json}` | `App/`, `Profiles/`, `CMakeLists.txt`, `CMakePresets.json` at repo root |
+
+No driver source, CMake option, or `drv_constants.h` macro changed — this is
+a directory move plus path fixups in `App/CMakeLists.txt`
+(`TFT_DRIVERS_ROOT`) and the docs.
+
+---
+
 # Release Notes — v1.0.0
 
 **ILI9341 TFT + XPT2046 Touch Driver for STM32 + LVGL**
