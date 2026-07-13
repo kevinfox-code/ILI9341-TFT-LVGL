@@ -63,10 +63,7 @@ void MX_RTC_Init(void)
    * clock isn't wiped back to this fixed value on every reset. */
   if (HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR0) == RTC_INIT_MAGIC)
   {
-    /* USER CODE END Check_RTC_BKUP */
-  }
-  else
-  {
+  /* USER CODE END Check_RTC_BKUP */
 
   /** Initialize RTC and set the Time and Date
   */

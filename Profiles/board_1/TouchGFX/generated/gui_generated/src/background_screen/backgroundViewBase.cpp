@@ -20,7 +20,7 @@ backgroundViewBase::backgroundViewBase()
     scalableImage1.setScalingAlgorithm(touchgfx::ScalableImage::NEAREST_NEIGHBOR);
     add(scalableImage1);
 
-    digitalClock1.setPosition(50, 58, 220, 55);
+    digitalClock1.setPosition(50, 48, 220, 55);
     digitalClock1.setColor(touchgfx::Color::getColorFromRGB(45, 214, 209));
     digitalClock1.setTypedText(touchgfx::TypedText(T___SINGLEUSE_J1J3));
     digitalClock1.displayLeadingZeroForHourIndicator(true);

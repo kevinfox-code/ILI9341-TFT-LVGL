@@ -18,7 +18,7 @@
             "Type": "DigitalClock",
             "Name": "digitalClock1",
             "X": 50,
-            "Y": 58,
+            "Y": 48,
             "Width": 220,
             "Height": 55,
             "TextColor": {
