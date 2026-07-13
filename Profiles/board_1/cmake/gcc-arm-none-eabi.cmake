@@ -13,26 +13,34 @@ set(CMAKE_CXX_COMPILER_ID GNU)
 # Some default GCC settings
 #
 # Resolve arm-none-eabi-gcc explicitly rather than trusting whichever one
-# PATH turns up first: this machine has three installs (Homebrew,
+# PATH turns up first: on Mac this machine has three installs (Homebrew,
 # STM32CubeCLT, and the STM32Cube VSCode extension's own bundle), and
 # Homebrew's ships an incomplete sysroot (missing stdint.h) that silently
 # poisons the CMake cache for whichever build dir gets configured while it
 # wins the PATH race — including background auto-configures triggered by
 # the IDE, not just interactive shells. HINTS is searched before the
 # default PATH locations, so this pins the STM32CubeCLT toolchain when
-# present while still falling back to PATH on other machines.
+# present while still falling back to PATH on other machines. STM32CLT_PATH
+# is set by the Windows STM32CubeCLT installer, so this also works across
+# CLT versions on Windows without hardcoding a version number.
 find_program(ARM_NONE_EABI_GCC arm-none-eabi-gcc
     HINTS /opt/ST/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin
+          "$ENV{STM32CLT_PATH}/GNU-tools-for-STM32/bin"
 )
 get_filename_component(TOOLCHAIN_BIN_DIR ${ARM_NONE_EABI_GCC} DIRECTORY)
-set(TOOLCHAIN_PREFIX                ${TOOLCHAIN_BIN_DIR}/arm-none-eabi-)
 
-set(CMAKE_C_COMPILER                ${TOOLCHAIN_PREFIX}gcc)
+# Resolve each tool via find_program (not by concatenating strings) so the
+# platform-correct executable suffix (".exe" on Windows, none on Mac/Linux)
+# gets applied. CMAKE_C_COMPILER built as a bare path string without that
+# suffix fails on Windows with "is not a full path to an existing compiler
+# tool" even though the file exists as arm-none-eabi-gcc.exe.
+find_program(CMAKE_C_COMPILER   arm-none-eabi-gcc     HINTS ${TOOLCHAIN_BIN_DIR} REQUIRED)
+find_program(CMAKE_CXX_COMPILER arm-none-eabi-g++     HINTS ${TOOLCHAIN_BIN_DIR} REQUIRED)
+find_program(CMAKE_OBJCOPY      arm-none-eabi-objcopy HINTS ${TOOLCHAIN_BIN_DIR} REQUIRED)
+find_program(CMAKE_SIZE         arm-none-eabi-size    HINTS ${TOOLCHAIN_BIN_DIR} REQUIRED)
+
 set(CMAKE_ASM_COMPILER              ${CMAKE_C_COMPILER})
-set(CMAKE_CXX_COMPILER              ${TOOLCHAIN_PREFIX}g++)
-set(CMAKE_LINKER                    ${TOOLCHAIN_PREFIX}g++)
-set(CMAKE_OBJCOPY                   ${TOOLCHAIN_PREFIX}objcopy)
-set(CMAKE_SIZE                      ${TOOLCHAIN_PREFIX}size)
+set(CMAKE_LINKER                    ${CMAKE_CXX_COMPILER})
 
 set(CMAKE_EXECUTABLE_SUFFIX_ASM     ".elf")
 set(CMAKE_EXECUTABLE_SUFFIX_C       ".elf")

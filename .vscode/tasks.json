@@ -1,15 +1,29 @@
 {
     "version": "2.0.0",
     // Pin PATH to the STM32CubeCLT toolchain so configure/build always pick
-    // up its arm-none-eabi-gcc. Other arm-none-eabi-gcc installs exist on
-    // this machine (Homebrew, the STM32Cube VSCode extension's own bundle)
-    // and whichever one PATH resolves first gets baked into the CMake
-    // cache for that build dir — the Homebrew one has an incomplete
-    // sysroot (missing stdint.h) and silently poisons the cache if it wins.
+    // up its arm-none-eabi-gcc. On Mac this machine has other
+    // arm-none-eabi-gcc installs (Homebrew, the STM32Cube VSCode
+    // extension's own bundle) and whichever one PATH resolves first gets
+    // baked into the CMake cache for that build dir — the Homebrew one has
+    // an incomplete sysroot (missing stdint.h) and silently poisons the
+    // cache if it wins. Windows only has the one STM32CubeCLT install, and
+    // its installer sets STM32CLT_PATH, so we key off that instead of a
+    // hardcoded version number.
     "options": {
-        "cwd": "${workspaceFolder}",
-        "env": {
-            "PATH": "/opt/ST/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin:/opt/ST/STM32CubeCLT_1.18.0/CMake/bin:/opt/ST/STM32CubeCLT_1.18.0/Ninja/bin:/opt/ST/STM32CubeCLT_1.18.0/STM32CubeProgrammer/bin:${env:PATH}"
+        "cwd": "${workspaceFolder}"
+    },
+    "windows": {
+        "options": {
+            "env": {
+                "PATH": "${env:STM32CLT_PATH}\\GNU-tools-for-STM32\\bin;${env:STM32CLT_PATH}\\CMake\\bin;${env:STM32CLT_PATH}\\Ninja\\bin;${env:STM32CLT_PATH}\\STM32CubeProgrammer\\bin;${env:PATH}"
+            }
+        }
+    },
+    "osx": {
+        "options": {
+            "env": {
+                "PATH": "/opt/ST/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin:/opt/ST/STM32CubeCLT_1.18.0/CMake/bin:/opt/ST/STM32CubeCLT_1.18.0/Ninja/bin:/opt/ST/STM32CubeCLT_1.18.0/STM32CubeProgrammer/bin:${env:PATH}"
+            }
         }
     },
     "tasks": [
