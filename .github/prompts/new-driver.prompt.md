@@ -175,3 +175,27 @@ do not invent a new style.
    ISR-signalled completion semaphore, DMA/transfer buffer validity/alignment
    handled, bounds-checked register access, and banners/section separators in
    place.
+
+
+## Communication Protocol Structs
+1. For any command or register with multiple fields, define a struct whose
+   field names match the corresponding `#define` bit-field macros. Size each
+   field with `uint8_t` / `uint16_t` / `uint32_t` to match the register width,
+   and add `static_assert(sizeof(struct) == <register width>)` to catch
+   padding.
+2. For commands sent over a framed bus, define a struct in address/command/
+   data order, e.g.:
+
+   ```c
+   typedef struct __attribute__((packed))
+   {
+       uint8_t  ADDRESS;
+       uint8_t  COMMAND;
+       uint8_t  DATA;
+   } spi_command_t;
+   ```
+
+   Add `static_assert(sizeof(spi_command_t) == <command width>)` to catch
+   padding.
+3. Mark every struct that is sent over the bus `__attribute__((packed))` so
+   the compiler cannot insert padding.
