@@ -101,6 +101,7 @@ App/
   constants.h          # the CubeMX bridge (board guards + abstract defines)
   SystemInit.h/.c      # System_* init policy calling MX_*_Init()
   BSP/                 # C++ wrappers over hardware (Device, System, Logger, RTC, LCD...)
+  Tasks/               # RTOS tasks and scheduling abstractions
   Drivers/             # Crypto/ Peripheral/ System/ driver abstractions
   Entry/               # CoreAppMain*.c entry points + Shared/ helpers
   Profiles/BoardRevA/  # CubeMX output for BOARD_REV_A (ALL generated files not be touched)
