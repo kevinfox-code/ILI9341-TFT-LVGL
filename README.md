@@ -83,6 +83,33 @@ STM32_Programmer_CLI -c port=SWD -w build/Debug/01_Display.elf -v -rst
 
 ---
 
+## Setting the RTC from a browser (Web Serial)
+
+The RTC is battery-backed (VBAT), so time survives power cycles — it just
+needs to be set once. Open
+[`dashboard/rtc-dashboard.html`](dashboard/rtc-dashboard.html) in Chrome or
+Edge, click **Connect**, and pick the board's VCP (ST-LINK) port. The
+dashboard shows the device clock live, and can set it manually or sync it
+to the computer's clock (aligned to the next whole second).
+
+The wire protocol runs over the existing USART2 @ 115200, ASCII lines:
+
+```text
+host → device                     device → host
+SET 2026-07-19T14:30:22           OK SET 2026-07-19T14:30:22  (or ERR BADFMT/BADVAL/...)
+TIME?                             TIME 2026-07-19T14:30:22
+PING                              PONG rtc-clock 1.0
+(unsolicited, 1 Hz)               RTC 2026-07-19T14:30:22
+```
+
+Implementation: `App/clock_protocol.c` (HAL-free parser/formatter,
+host-tested), `App/system.c` (RTC set/get + interrupt-driven UART RX),
+`time_sync_task` in `App/app_main.c`. A successful `SET` also stamps
+`RTC_BKP_DR0`, so the first-boot seed in `MX_RTC_Init()` never overwrites a
+host-set clock.
+
+---
+
 ## Porting to a new board
 
 1. `cp -r Profiles/board_1 Profiles/board_2` — or generate fresh from CubeMX
@@ -99,10 +126,11 @@ more detail.
 
 ## Testing
 
-Host unit tests for the driver library (no ARM toolchain needed):
+Host unit tests (no ARM toolchain needed):
 
 ```bash
-cd App/drivers/tests/host && ./run.sh
+cd App/drivers/tests/host && ./run.sh   # driver library
+cd tests/host && ./run.sh               # App-level (clock_protocol time-sync)
 ```
 
 The on-target hardware smoke checklist lives at

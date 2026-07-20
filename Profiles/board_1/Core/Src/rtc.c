@@ -59,9 +59,10 @@ void MX_RTC_Init(void)
 
   /* RTC_BKP_DR0 survives warm resets and reflashes as long as VBAT/backup
    * domain power is maintained; it does NOT survive a backup-domain reset
-   * (VBAT loss). Only stamp the seed date/time on true first-boot so the
-   * clock isn't wiped back to this fixed value on every reset. */
-  if (HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR0) == RTC_INIT_MAGIC)
+   * (VBAT loss). Only stamp the seed date/time on true first-boot — i.e.
+   * when the magic is ABSENT — so a host-set or battery-kept clock isn't
+   * wiped back to this fixed value on every reset. */
+  if (HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR0) != RTC_INIT_MAGIC)
   {
   /* USER CODE END Check_RTC_BKUP */
 

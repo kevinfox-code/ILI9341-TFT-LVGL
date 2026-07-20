@@ -43,6 +43,7 @@ add_subdirectory(${TFT_DRIVERS_ROOT} tft_drivers)
 add_library(app STATIC
     app_main.c
     system.c
+    clock_protocol.c
 )
 target_include_directories(app PUBLIC ${CMAKE_CURRENT_LIST_DIR})
 target_link_libraries(app PUBLIC tft_drivers drv_platform)
